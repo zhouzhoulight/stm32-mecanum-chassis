@@ -1,0 +1,22 @@
+solution:
+  created-for: CMSIS-Toolbox@2.15.0
+  compiler: GCC@13.3.1
+  packs:
+    - pack: Keil::STM32F4xx_DFP@3.1.1
+  target-types:
+    - type: Board
+      device: STM32F407VETx
+      target-set:
+        - set:
+          images:
+            - project-context: chassis.Debug
+          debugger:
+            name: CMSIS-DAP@pyOCD
+            protocol: swd
+            clock: 1000000
+  build-types:
+    - type: Debug
+      debug: on
+      optimize: debug
+  projects:
+    - project: chassis.cproject.yml

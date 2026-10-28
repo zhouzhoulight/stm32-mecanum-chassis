@@ -1,0 +1,86 @@
+{
+  "record_count": 401,
+  "first_ms": 0,
+  "last_ms": 79967,
+  "moving_record_count": 400,
+  "final_record_count": 1,
+  "all_v_7": true,
+  "start_yaw_deg": 32.777,
+  "end_yaw_deg": 38.232,
+  "final_delta_deg": 5.455,
+  "max_delta_deg": 5.51,
+  "min_delta_deg": 0.0,
+  "max_angle_age_ms": 100,
+  "interval_min_ms": 167,
+  "interval_median_ms": 200.0,
+  "interval_max_ms": 200,
+  "bad_checksum_counter_values": [
+    0
+  ],
+  "uart_error_counter_values": [
+    0
+  ],
+  "samples_at_seconds": {
+    "0": {
+      "ms": 0,
+      "d": 0,
+      "z": 0,
+      "run": 1
+    },
+    "10": {
+      "ms": 10000,
+      "d": 1297,
+      "z": -549,
+      "run": 1
+    },
+    "20": {
+      "ms": 20000,
+      "d": 2285,
+      "z": -1403,
+      "run": 1
+    },
+    "30": {
+      "ms": 30000,
+      "d": 3208,
+      "z": -1220,
+      "run": 1
+    },
+    "40": {
+      "ms": 40000,
+      "d": 4318,
+      "z": -488,
+      "run": 1
+    },
+    "50": {
+      "ms": 50000,
+      "d": 5455,
+      "z": -305,
+      "run": 1
+    },
+    "60": {
+      "ms": 60000,
+      "d": 5455,
+      "z": 0,
+      "run": 1
+    },
+    "70": {
+      "ms": 70000,
+      "d": 5455,
+      "z": 0,
+      "run": 1
+    },
+    "80": {
+      "ms": 79967,
+      "d": 5455,
+      "z": 0,
+      "run": 0
+    }
+  },
+  "physical_distance_cm": 119.5,
+  "physical_fore_aft_drift_cm": -3.5,
+  "physical_stop": true,
+  "physical_completion_time_seconds": null,
+  "heading_control": false,
+  "pulse_completion_verified": false,
+  "estimated_physical_yaw_deg": 4
+}

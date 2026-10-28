@@ -1,0 +1,5 @@
+# 所有从本工程启动的 pyOCD 会话都遵循这些设置。
+# 如果芯片有读保护，不自动解锁或整片擦除。
+auto_unlock: false
+# 下载任务显式保持停止；只读 attach 也不改变已有运行/暂停状态。
+resume_on_disconnect: false

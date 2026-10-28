@@ -1,0 +1,14 @@
+{
+  "cmsis-csolution.autoDebugLaunch": false,
+  "cmsis-csolution.generateClangSetup": true,
+  "files.encoding": "utf8",
+  "files.exclude": {
+    "tmp": true,
+    "out": true
+  },
+  "search.exclude": {
+    "vendor": true,
+    "tmp": true,
+    "out": true
+  }
+}

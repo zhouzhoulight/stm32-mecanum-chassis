@@ -1,0 +1,17 @@
+build/
+out/
+tmp/
+__pycache__/
+*.pyc
+.DS_Store
+.env
+.env.*
+!.env.example
+.vscode/*.local.json
+.cmsis/tools-environment.yml
+.clangd
+*.cbuild-idx.yml
+*.cbuild.yml
+*.cbuild-run.yml
+*.cbuild-gen.yml
+*.cbuild-gen-idx.yml

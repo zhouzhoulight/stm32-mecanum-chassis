@@ -1,0 +1,138 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "F407 1：编译测试程序",
+      "type": "process",
+      "command": "/usr/bin/python3",
+      "args": [
+        "${workspaceFolder}/scripts/project.py",
+        "build"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [
+        "$gcc"
+      ],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "focus": false
+      },
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      }
+    },
+    {
+      "label": "F407 2：查看 CMSIS-DAP",
+      "type": "process",
+      "command": "/usr/bin/python3",
+      "args": [
+        "${workspaceFolder}/scripts/project.py",
+        "probes"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "focus": false
+      }
+    },
+    {
+      "label": "F407 3：下载程序（CMSIS-DAP）",
+      "type": "process",
+      "command": "/usr/bin/python3",
+      "args": [
+        "${workspaceFolder}/scripts/project.py",
+        "flash",
+        "--probe",
+        "${input:probeId}"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "focus": true
+      }
+    },
+    {
+      "label": "F407 4：打开 USART1 控制台",
+      "type": "process",
+      "command": "/usr/bin/python3",
+      "args": [
+        "${workspaceFolder}/scripts/project.py",
+        "console",
+        "--port",
+        "${input:serialPort}"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "focus": true
+      }
+    },
+    {
+      "label": "F407 5：查看 USB 串口",
+      "type": "process",
+      "command": "/usr/bin/python3",
+      "args": [
+        "${workspaceFolder}/scripts/project.py",
+        "ports"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "focus": false
+      }
+    },
+    {
+      "label": "F407：调试前编译并下载",
+      "type": "process",
+      "command": "/usr/bin/python3",
+      "args": [
+        "${workspaceFolder}/scripts/project.py",
+        "debug-load"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [
+        "$gcc"
+      ],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      }
+    }
+  ],
+  "inputs": [
+    {
+      "id": "serialPort",
+      "type": "promptString",
+      "description": "USART1 的 USB 串口；只有一个时填 auto",
+      "default": "auto"
+    },
+    {
+      "id": "probeId",
+      "type": "promptString",
+      "description": "CMSIS-DAP 完整序列号；只有一个调试器时填 auto",
+      "default": "auto"
+    }
+  ]
+}

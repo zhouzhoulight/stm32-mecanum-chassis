@@ -1,0 +1,42 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "F407 CMSIS-DAP 调试（停在 main）",
+      "type": "gdbtarget",
+      "request": "launch",
+      "cwd": "${workspaceFolder}",
+      "program": "${workspaceFolder}/out/chassis/Board/Debug/chassis.elf",
+      "gdb": "${env:CHASSIS_GDB}",
+      "auxiliaryGdb": true,
+      "preLaunchTask": "F407：调试前编译并下载",
+      "initCommands": [
+        "monitor reset halt",
+        "tbreak main"
+      ],
+      "customResetCommands": [
+        "monitor reset halt",
+        "maintenance flush register-cache",
+        "maintenance flush dcache",
+        "tbreak main",
+        "continue"
+      ],
+      "target": {
+        "server": "${env:CHASSIS_PYOCD}",
+        "serverParameters": [
+          "gdbserver",
+          "--probe",
+          "cmsisdap:",
+          "--no-wait",
+          "--cbuild-run",
+          "${workspaceFolder}/out/chassis+Board.cbuild-run.yml",
+          "--frequency",
+          "1000000",
+          "-O",
+          "resume_on_disconnect=false"
+        ],
+        "port": "3333"
+      }
+    }
+  ]
+}

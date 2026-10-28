@@ -1,0 +1,44 @@
+[
+  {
+    "file": "records/f407-v2.0/ground-forward-long-f407-v2.0-20261027-170917.txt",
+    "source_basename": "ground-forward-long-f407-v2.0-20261027-170917.txt",
+    "source_sha256": "cd28ec3601eaa41e8acb723ce6d61fb36a8e9d002d227883fb8939296d8a2d4e",
+    "published_sha256": "116cfcdadbab24234266a6270b186e9d8c41c7318d613507578e313d9bb5260d",
+    "redactions": "local filesystem paths and probe/serial identifiers only"
+  },
+  {
+    "file": "records/f407-v2.0/ground-forward-long-f407-v2.0-20261027-170917.result.json",
+    "source_basename": "ground-forward-long-f407-v2.0-20261027-170917.result.json",
+    "source_sha256": "31e62f6402482496c917c656255b27702a6c38afc24f39c81c434dba18ac2115",
+    "published_sha256": "31e62f6402482496c917c656255b27702a6c38afc24f39c81c434dba18ac2115",
+    "redactions": "local filesystem paths and probe/serial identifiers only"
+  },
+  {
+    "file": "records/f407-v2.0/calibration-strafe-left-F407-L01-v2.0-20261027-172325.txt",
+    "source_basename": "calibration-strafe-left-F407-L01-v2.0-20261027-172325.txt",
+    "source_sha256": "966c60a9c4729dd2a2696bda90ebb64d90fd0ff8729038e350db532022d91216",
+    "published_sha256": "7fbea1a288d92225397239726946a432e139eb9b0ff0a9c1688b6d07d1dce117",
+    "redactions": "local filesystem paths and probe/serial identifiers only"
+  },
+  {
+    "file": "records/f407-v2.0/calibration-strafe-left-F407-L01-v2.0-20261027-172325.result.json",
+    "source_basename": "calibration-strafe-left-F407-L01-v2.0-20261027-172325.result.json",
+    "source_sha256": "7294d22c4bed4c644033eba1e22446f2e44aad21db3c7fee8b713d5d95e3e974",
+    "published_sha256": "7294d22c4bed4c644033eba1e22446f2e44aad21db3c7fee8b713d5d95e3e974",
+    "redactions": "local filesystem paths and probe/serial identifiers only"
+  },
+  {
+    "file": "records/f407-v2.0/calibration-strafe-left-F407-L01-v2.0-20261027-172325-yaw.csv",
+    "source_basename": "calibration-strafe-left-F407-L01-v2.0-20261027-172325-yaw.csv",
+    "source_sha256": "04101d6428c5b0f899e3be6d0e9702b4e5e14d40ba771f0fc81b441798448fcd",
+    "published_sha256": "6d0badc07598927e145dda03c6d29788c12d19c8a0676bc666a676638b30d700",
+    "redactions": "local filesystem paths and probe/serial identifiers only"
+  },
+  {
+    "file": "records/f407-v2.0/calibration-strafe-left-F407-L01-v2.0-20261027-172325-yaw-summary.json",
+    "source_basename": "calibration-strafe-left-F407-L01-v2.0-20261027-172325-yaw-summary.json",
+    "source_sha256": "52fff388c48dc8bae87f7401f8c53f475b4f526f80606674d9c44f33004c25cf",
+    "published_sha256": "52fff388c48dc8bae87f7401f8c53f475b4f526f80606674d9c44f33004c25cf",
+    "redactions": "local filesystem paths and probe/serial identifiers only"
+  }
+]

@@ -1,0 +1,136 @@
+TX: 
+TX: stop
+STOP/DISABLE sent.
+RX: 01 FE E2 6B 01 F3 02 6B 02 FE E2 6B 02 F3 02 6B 
+RX: 03 FE E2 6B 03 F3 02 6B 04 FE E2 6B 04 F3 02 6B 
+TX: status
+STM32F407VET6 test | DEVID=0x413 | Flash=512 KiB
+HSE=25MHz | HCLK=168000000 Hz | uptime=706086 ms
+Console: USART1 PA9/PA10 | Motor: UART4 PA0/PA1 | 115200 8N1
+Wheels: FL=4 FR=1 RL=3 RR=2 | all forward dir=1
+Firmware: v2.0 | Mecanum: X | Group: forward/back/left/right/cw/ccw
+Long group: forward_long/back_long/left_long/right_long/cw_long/ccw_long
+Long motion: *_long | RPM=5 | pulses=1600 | deadline_ms=8000
+Calibration: forward_16000 | RPM=5 | pulses=16000 | deadline_ms=80000
+Calibration strafe: left_16000/right_16000 | RPM=5 | pulses=16000 | deadline_ms=80000
+Validation: forward_1m | nominal_cm=100 | RPM=5 | pulses=12924 | deadline_ms=80000
+Validation: back_1m | nominal_cm=100 | RPM=5 | pulses=12924 | deadline_ms=80000
+IMU: USART3 PD8/PD9 | RX_ONLY | baud=115200 | heading control=OFF
+YAW trace: moving only | interval_ms=200 | heading control=OFF
+TX: status
+STM32F407VET6 test | DEVID=0x413 | Flash=512 KiB
+HSE=25MHz | HCLK=168000000 Hz | uptime=706891 ms
+Console: USART1 PA9/PA10 | Motor: UART4 PA0/PA1 | 115200 8N1
+Wheels: FL=4 FR=1 RL=3 RR=2 | all forward dir=1
+Firmware: v2.0 | Mecanum: X | Group: forward/back/left/right/cw/ccw
+Long group: forward_long/back_long/left_long/right_long/cw_long/ccw_long
+Long motion: *_long | RPM=5 | pulses=1600 | deadline_ms=8000
+Calibration: forward_16000 | RPM=5 | pulses=16000 | deadline_ms=80000
+Calibration strafe: left_16000/right_16000 | RPM=5 | pulses=16000 | deadline_ms=80000
+Validation: forward_1m | nominal_cm=100 | RPM=5 | pulses=12924 | deadline_ms=80000
+Validation: back_1m | nominal_cm=100 | RPM=5 | pulses=12924 | deadline_ms=80000
+IMU: USART3 PD8/PD9 | RX_ONLY | baud=115200 | heading control=OFF
+YAW trace: moving only | interval_ms=200 | heading control=OFF
+TX: probe 1
+PROBE: version query sent; no enable/motion. Waiting up to 500ms.
+PROBE OK: addressed version reply received. UART round trip works; see RX bytes.
+RX: 01 1F 03 82 6B 
+TX: probe 2
+PROBE: version query sent; no enable/motion. Waiting up to 500ms.
+PROBE OK: addressed version reply received. UART round trip works; see RX bytes.
+RX: 02 1F 03 82 6B 
+TX: probe 3
+PROBE: version query sent; no enable/motion. Waiting up to 500ms.
+PROBE OK: addressed version reply received. UART round trip works; see RX bytes.
+RX: 03 1F 03 82 6B 
+TX: probe 4
+PROBE: version query sent; no enable/motion. Waiting up to 500ms.
+PROBE OK: addressed version reply received. UART round trip works; see RX bytes.
+RX: 04 1F 03 82 6B 
+TX: probe 1
+PROBE: version query sent; no enable/motion. Waiting up to 500ms.
+PROBE OK: addressed version reply received. UART round trip works; see RX bytes.
+RX: 01 1F 03 82 6B 
+TX: probe 2
+PROBE: version query sent; no enable/motion. Waiting up to 500ms.
+PROBE OK: addressed version reply received. UART round trip works; see RX bytes.
+RX: 02 1F 03 82 6B 
+TX: probe 3
+PROBE: version query sent; no enable/motion. Waiting up to 500ms.
+PROBE OK: addressed version reply received. UART round trip works; see RX bytes.
+RX: 03 1F 03 82 6B 
+TX: probe 4
+PROBE: version query sent; no enable/motion. Waiting up to 500ms.
+PROBE OK: addressed version reply received. UART round trip works; see RX bytes.
+RX: 04 1F 03 82 6B 
+TX: imu
+IMU USART3 PD8/PD9 RX_ONLY | baud=115200 | bytes=314698 | frames=28608 | bad_checksum=0 | uart_errors=0
+IMU angle: valid=1 | samples=7152 | age_ms=93 | roll_mdeg=307 | pitch_mdeg=758 | yaw_mdeg=33107
+IMU gyro: valid=1 | samples=7152 | age_ms=94 | z_mdps=0
+TX: imu
+IMU USART3 PD8/PD9 RX_ONLY | baud=115200 | bytes=314988 | frames=28634 | bad_checksum=0 | uart_errors=0
+IMU angle: valid=1 | samples=7158 | age_ms=99 | roll_mdeg=313 | pitch_mdeg=758 | yaw_mdeg=33107
+IMU gyro: valid=1 | samples=7159 | age_ms=0 | z_mdps=0
+TX: imu
+IMU USART3 PD8/PD9 RX_ONLY | baud=115200 | bytes=315270 | frames=28660 | bad_checksum=0 | uart_errors=0
+IMU angle: valid=1 | samples=7165 | age_ms=5 | roll_mdeg=313 | pitch_mdeg=758 | yaw_mdeg=33107
+IMU gyro: valid=1 | samples=7165 | age_ms=6 | z_mdps=0
+TX: arm all
+ALL ARMED for 10s. No motion yet. Send one group command; help lists names.
+TX: forward_long
+RX: 01 F3 02 6B 02 F3 02 6B 03 F3 02 6B 04 F3 02 6B 
+LONG JOG sent: forward_long; 5 RPM, 1600 pulses, 8-second stop deadline. Type stop to stop early.
+RX: 01 FD 02 6B 02 FD 02 6B 03 FD 02 6B 04 FD 02 6B 
+YAW t=717079 ms=0 run=1 v=7 age=57 y=33107 d=0 z=0 n=7174 b=0 e=0
+YAW t=717279 ms=200 run=1 v=7 age=57 y=33145 d=38 z=-244 n=7176 b=0 e=0
+YAW t=717479 ms=400 run=1 v=7 age=58 y=33156 d=49 z=-305 n=7178 b=0 e=0
+YAW t=717679 ms=600 run=1 v=7 age=58 y=33184 d=77 z=-122 n=7180 b=0 e=0
+YAW t=717879 ms=800 run=1 v=7 age=58 y=33184 d=77 z=-427 n=7182 b=0 e=0
+YAW t=718079 ms=1000 run=1 v=7 age=58 y=33167 d=60 z=-366 n=7184 b=0 e=0
+YAW t=718279 ms=1200 run=1 v=7 age=58 y=33173 d=66 z=-61 n=7186 b=0 e=0
+YAW t=718479 ms=1400 run=1 v=7 age=59 y=33167 d=60 z=-305 n=7188 b=0 e=0
+YAW t=718679 ms=1600 run=1 v=7 age=59 y=33178 d=71 z=0 n=7190 b=0 e=0
+YAW t=718879 ms=1800 run=1 v=7 age=59 y=33189 d=82 z=-183 n=7192 b=0 e=0
+YAW t=719079 ms=2000 run=1 v=7 age=59 y=33217 d=110 z=-122 n=7194 b=0 e=0
+YAW t=719279 ms=2200 run=1 v=7 age=59 y=33211 d=104 z=0 n=7196 b=0 e=0
+YAW t=719479 ms=2400 run=1 v=7 age=60 y=33206 d=99 z=-122 n=7198 b=0 e=0
+YAW t=719679 ms=2600 run=1 v=7 age=60 y=33195 d=88 z=-305 n=7200 b=0 e=0
+YAW t=719879 ms=2800 run=1 v=7 age=60 y=33217 d=110 z=-122 n=7202 b=0 e=0
+YAW t=720079 ms=3000 run=1 v=7 age=60 y=33228 d=121 z=-183 n=7204 b=0 e=0
+YAW t=720279 ms=3200 run=1 v=7 age=60 y=33217 d=110 z=61 n=7206 b=0 e=0
+YAW t=720479 ms=3400 run=1 v=7 age=61 y=33211 d=104 z=122 n=7208 b=0 e=0
+YAW t=720679 ms=3600 run=1 v=7 age=61 y=33222 d=115 z=0 n=7210 b=0 e=0
+YAW t=720879 ms=3800 run=1 v=7 age=61 y=33195 d=88 z=0 n=7212 b=0 e=0
+YAW t=721079 ms=4000 run=1 v=7 age=61 y=33222 d=115 z=0 n=7214 b=0 e=0
+YAW t=721279 ms=4200 run=1 v=7 age=61 y=33222 d=115 z=-244 n=7216 b=0 e=0
+YAW t=721479 ms=4400 run=1 v=7 age=62 y=33217 d=110 z=183 n=7218 b=0 e=0
+YAW t=721679 ms=4600 run=1 v=7 age=62 y=33222 d=115 z=244 n=7220 b=0 e=0
+YAW t=721879 ms=4800 run=1 v=7 age=62 y=33239 d=132 z=0 n=7222 b=0 e=0
+YAW t=722079 ms=5000 run=1 v=7 age=62 y=33266 d=159 z=244 n=7224 b=0 e=0
+YAW t=722279 ms=5200 run=1 v=7 age=62 y=33228 d=121 z=122 n=7226 b=0 e=0
+YAW t=722479 ms=5400 run=1 v=7 age=63 y=33222 d=115 z=0 n=7228 b=0 e=0
+YAW t=722679 ms=5600 run=1 v=7 age=63 y=33222 d=115 z=0 n=7230 b=0 e=0
+YAW t=722879 ms=5800 run=1 v=7 age=63 y=33222 d=115 z=0 n=7232 b=0 e=0
+YAW t=723079 ms=6000 run=1 v=7 age=63 y=33222 d=115 z=0 n=7234 b=0 e=0
+YAW t=723279 ms=6200 run=1 v=7 age=64 y=33222 d=115 z=0 n=7236 b=0 e=0
+YAW t=723479 ms=6400 run=1 v=7 age=64 y=33222 d=115 z=0 n=7238 b=0 e=0
+YAW t=723679 ms=6600 run=1 v=7 age=64 y=33222 d=115 z=0 n=7240 b=0 e=0
+YAW t=723879 ms=6800 run=1 v=7 age=64 y=33222 d=115 z=0 n=7242 b=0 e=0
+YAW t=724079 ms=7000 run=1 v=7 age=64 y=33222 d=115 z=0 n=7244 b=0 e=0
+YAW t=724279 ms=7200 run=1 v=7 age=65 y=33222 d=115 z=0 n=7246 b=0 e=0
+YAW t=724479 ms=7400 run=1 v=7 age=65 y=33222 d=115 z=0 n=7248 b=0 e=0
+YAW t=724679 ms=7600 run=1 v=7 age=65 y=33222 d=115 z=0 n=7250 b=0 e=0
+YAW t=724879 ms=7800 run=1 v=7 age=65 y=33222 d=115 z=0 n=7252 b=0 e=0
+STOP/DISABLE sent after 8 seconds (forward_long). Observe actual motor.
+RX: 01 FE 02 6B 01 F3 02 6B 02 FE 02 6B 02 F3 02 6B 
+YAW t=725047 ms=7968 run=0 v=7 age=133 y=33222 d=115 z=0 n=7253 b=0 e=0
+RX: 03 FE 02 6B 03 F3 02 6B 04 FE 02 6B 04 F3 02 6B 
+TX: imu
+IMU USART3 PD8/PD9 RX_ONLY | baud=115200 | bytes=319758 | frames=29068 | bad_checksum=0 | uart_errors=0
+IMU angle: valid=1 | samples=7267 | age_ms=36 | roll_mdeg=285 | pitch_mdeg=653 | yaw_mdeg=33222
+IMU gyro: valid=1 | samples=7267 | age_ms=37 | z_mdps=0
+TX: stop
+STOP/DISABLE sent.
+RX: 01 FE E2 6B 01 F3 02 6B 02 FE E2 6B 02 F3 02 6B 
+RX: 03 FE E2 6B 03 F3 02 6B 04 FE E2 6B 04 F3 02 6B 
+Serial closed.

@@ -1,0 +1,70 @@
+{
+  "version": "v2.0",
+  "preserved_application_source": [
+    {
+      "path": "src/yaw_trace.c",
+      "sha256": "9f4e8740116ccb474886f6452ca01d1c73f3763b573b8d5d7d17c133d376cbaa"
+    },
+    {
+      "path": "src/motor_test.c",
+      "sha256": "43e5068993649fcf56978d44b181ce5b7868560e30010fe04f1ee28311fb941a"
+    },
+    {
+      "path": "src/startup_stm32f407xx.s",
+      "sha256": "430f14fd00db0f7aa88f354aee54064efb582ddc4cc264fb8e435dc7d7a2f53d"
+    },
+    {
+      "path": "src/main.c",
+      "sha256": "1548349f2d21ff2c75eeb3b6ca738ec39fc20bc30a05f520def17110562aa931"
+    },
+    {
+      "path": "src/system_stm32f4xx.c",
+      "sha256": "a31929eab936ac98db060c18917118acf79dc96e1f03ed4b57d614535dd06d70"
+    },
+    {
+      "path": "src/LICENSE.txt",
+      "sha256": "135fb2d86e9ecdf6824cc3bba21c72b8e380c07b055fbebb6b995463eb609baf"
+    },
+    {
+      "path": "src/wit_imu.c",
+      "sha256": "b1cbfd9da3efc1fe66d0134081f55a80e1d3bc48c10d1623949d8e89a85f629c"
+    },
+    {
+      "path": "include/chassis_config.h",
+      "sha256": "4df3176ac4f64c362159a63037456f6cb182a21e378833799210f8351aabbb35"
+    },
+    {
+      "path": "include/wit_imu.h",
+      "sha256": "1fa8ba8ccea0efb7e8dedba03557d24bcedc26ebe08bee56876575757e63d039"
+    },
+    {
+      "path": "include/stm32f4xx_hal_conf.h",
+      "sha256": "66d778dc756d25650969c13f596bae9d05584da29378945905f58f7a89ebd7ee"
+    },
+    {
+      "path": "include/motor_test.h",
+      "sha256": "f175562dd4d535ff4def21ff90884e2263303780ef132a31ea857ce1206fa9f1"
+    },
+    {
+      "path": "include/yaw_trace.h",
+      "sha256": "b252b426f9f87b93daa8ba5845680df004da05eb810599a62fcea1bb3f0d1458"
+    },
+    {
+      "path": "include/LICENSE.txt",
+      "sha256": "d5a162f3eaf2b7b6762f00700017cae5695ebbdce7932fead8316448baafd9c1"
+    }
+  ],
+  "archived_bin_sha256": "017eb5f29a0369bbd7a369ab620d6ba656e18c75b40c55eb8409ad96636c5e4f",
+  "rebuilt_bin_sha256": "017eb5f29a0369bbd7a369ab620d6ba656e18c75b40c55eb8409ad96636c5e4f",
+  "offline_checks": {
+    "host_c_suites": [
+      "motor",
+      "imu",
+      "yaw_trace"
+    ],
+    "python_tool_tests": 7,
+    "cmsis_build": true,
+    "elf_vectors_memory": true,
+    "no_hardware_access": true
+  }
+}

@@ -1,0 +1,60 @@
+project:
+  language-C: c11
+  define:
+    - STM32F407xx
+    - USE_HAL_DRIVER
+    - HSE_VALUE: 25000000U
+  add-path:
+    - include
+    - vendor/Drivers/STM32F4xx_HAL_Driver/Inc
+    - vendor/Drivers/CMSIS/Include
+    - vendor/Drivers/CMSIS/Device/ST/STM32F4xx/Include
+  output:
+    type: [elf, hex, bin]
+  linker:
+    - script: STM32F407VE.ld
+  misc:
+    - for-compiler: GCC
+      C:
+        - -ffunction-sections
+        - -fdata-sections
+        - -Wall
+        - -Wextra
+      Link:
+        - -nostartfiles
+        - --specs=nano.specs
+        - --specs=nosys.specs
+        - -Wl,--gc-sections
+        - -Wl,--print-memory-usage
+  groups:
+    - group: Application
+      files:
+        - file: src/main.c
+        - file: src/motor_test.c
+        - file: src/wit_imu.c
+        - file: src/yaw_trace.c
+        - file: include/wit_imu.h
+        - file: include/yaw_trace.h
+        - file: include/motor_test.h
+        - file: include/chassis_config.h
+    - group: Startup
+      files:
+        - file: src/startup_stm32f407xx.s
+        - file: src/system_stm32f4xx.c
+    - group: ST HAL
+      misc:
+        - for-compiler: GCC
+          C:
+            - -Wno-unused-parameter
+      files:
+        - file: vendor/Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal.c
+        - file: vendor/Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_cortex.c
+        - file: vendor/Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_dma.c
+        - file: vendor/Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_gpio.c
+        - file: vendor/Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_rcc.c
+        - file: vendor/Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_rcc_ex.c
+        - file: vendor/Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_flash.c
+        - file: vendor/Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_flash_ex.c
+        - file: vendor/Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_pwr.c
+        - file: vendor/Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_uart.c
+        - file: vendor/Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_pwr_ex.c

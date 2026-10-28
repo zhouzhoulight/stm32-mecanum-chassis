@@ -1,0 +1,254 @@
+{
+  "date": "2026-10-27T17:09:17.518061+08:00",
+  "firmware": "F407 v2.0",
+  "command": "forward_long",
+  "rpm": 5,
+  "relative_pulses": 1600,
+  "stop_deadline_ms": 8000,
+  "user_authorization": "User confirms level ground, at least 1m forward space, clear hands/cables, powered; one forward trial.",
+  "motion_sent": true,
+  "arm_sent": true,
+  "reset_sent": false,
+  "flash_written": false,
+  "sensor_config_writes": false,
+  "heading_control": false,
+  "driver_probes": [
+    {
+      "round": 1,
+      "address": 1,
+      "valid": true,
+      "raw": "011F03826B"
+    },
+    {
+      "round": 1,
+      "address": 2,
+      "valid": true,
+      "raw": "021F03826B"
+    },
+    {
+      "round": 1,
+      "address": 3,
+      "valid": true,
+      "raw": "031F03826B"
+    },
+    {
+      "round": 1,
+      "address": 4,
+      "valid": true,
+      "raw": "041F03826B"
+    },
+    {
+      "round": 2,
+      "address": 1,
+      "valid": true,
+      "raw": "011F03826B"
+    },
+    {
+      "round": 2,
+      "address": 2,
+      "valid": true,
+      "raw": "021F03826B"
+    },
+    {
+      "round": 2,
+      "address": 3,
+      "valid": true,
+      "raw": "031F03826B"
+    },
+    {
+      "round": 2,
+      "address": 4,
+      "valid": true,
+      "raw": "041F03826B"
+    }
+  ],
+  "imu_samples": [
+    {
+      "link": {
+        "baud": 115200,
+        "bytes": 314698,
+        "frames": 28608,
+        "bad_checksum": 0,
+        "uart_errors": 0
+      },
+      "angle": {
+        "valid": 1,
+        "samples": 7152,
+        "age_ms": 93,
+        "roll_mdeg": 307,
+        "pitch_mdeg": 758,
+        "yaw_mdeg": 33107
+      },
+      "gyro": {
+        "valid": 1,
+        "samples": 7152,
+        "age_ms": 94,
+        "z_mdps": 0
+      }
+    },
+    {
+      "link": {
+        "baud": 115200,
+        "bytes": 314988,
+        "frames": 28634,
+        "bad_checksum": 0,
+        "uart_errors": 0
+      },
+      "angle": {
+        "valid": 1,
+        "samples": 7158,
+        "age_ms": 99,
+        "roll_mdeg": 313,
+        "pitch_mdeg": 758,
+        "yaw_mdeg": 33107
+      },
+      "gyro": {
+        "valid": 1,
+        "samples": 7159,
+        "age_ms": 0,
+        "z_mdps": 0
+      }
+    },
+    {
+      "link": {
+        "baud": 115200,
+        "bytes": 315270,
+        "frames": 28660,
+        "bad_checksum": 0,
+        "uart_errors": 0
+      },
+      "angle": {
+        "valid": 1,
+        "samples": 7165,
+        "age_ms": 5,
+        "roll_mdeg": 313,
+        "pitch_mdeg": 758,
+        "yaw_mdeg": 33107
+      },
+      "gyro": {
+        "valid": 1,
+        "samples": 7165,
+        "age_ms": 6,
+        "z_mdps": 0
+      }
+    }
+  ],
+  "physical_observation": {
+    "source": "User reply in this conversation",
+    "quote": "车正常走并且停稳了",
+    "normal_expected_forward_observed": true,
+    "physical_stop_confirmed": true,
+    "distance_cm": null,
+    "fore_aft_or_lateral_drift_cm": null,
+    "independently_measured_yaw_deg": null,
+    "completion_time_seconds": null,
+    "note": "No distance or numeric drift supplied. This feedback applies to F407 forward_long, not historical F103 L05."
+  },
+  "uptime_ms": [
+    706086,
+    706891
+  ],
+  "timed_stop_logged": true,
+  "motion_log_received": true,
+  "motion_ack_addresses": [
+    1,
+    2,
+    3,
+    4
+  ],
+  "timed_stop_ack_addresses": [
+    1,
+    2,
+    3,
+    4
+  ],
+  "timed_disable_ack_addresses": [
+    1,
+    2,
+    3,
+    4
+  ],
+  "yaw_trace_lines": [
+    "YAW t=717079 ms=0 run=1 v=7 age=57 y=33107 d=0 z=0 n=7174 b=0 e=0",
+    "YAW t=717279 ms=200 run=1 v=7 age=57 y=33145 d=38 z=-244 n=7176 b=0 e=0",
+    "YAW t=717479 ms=400 run=1 v=7 age=58 y=33156 d=49 z=-305 n=7178 b=0 e=0",
+    "YAW t=717679 ms=600 run=1 v=7 age=58 y=33184 d=77 z=-122 n=7180 b=0 e=0",
+    "YAW t=717879 ms=800 run=1 v=7 age=58 y=33184 d=77 z=-427 n=7182 b=0 e=0",
+    "YAW t=718079 ms=1000 run=1 v=7 age=58 y=33167 d=60 z=-366 n=7184 b=0 e=0",
+    "YAW t=718279 ms=1200 run=1 v=7 age=58 y=33173 d=66 z=-61 n=7186 b=0 e=0",
+    "YAW t=718479 ms=1400 run=1 v=7 age=59 y=33167 d=60 z=-305 n=7188 b=0 e=0",
+    "YAW t=718679 ms=1600 run=1 v=7 age=59 y=33178 d=71 z=0 n=7190 b=0 e=0",
+    "YAW t=718879 ms=1800 run=1 v=7 age=59 y=33189 d=82 z=-183 n=7192 b=0 e=0",
+    "YAW t=719079 ms=2000 run=1 v=7 age=59 y=33217 d=110 z=-122 n=7194 b=0 e=0",
+    "YAW t=719279 ms=2200 run=1 v=7 age=59 y=33211 d=104 z=0 n=7196 b=0 e=0",
+    "YAW t=719479 ms=2400 run=1 v=7 age=60 y=33206 d=99 z=-122 n=7198 b=0 e=0",
+    "YAW t=719679 ms=2600 run=1 v=7 age=60 y=33195 d=88 z=-305 n=7200 b=0 e=0",
+    "YAW t=719879 ms=2800 run=1 v=7 age=60 y=33217 d=110 z=-122 n=7202 b=0 e=0",
+    "YAW t=720079 ms=3000 run=1 v=7 age=60 y=33228 d=121 z=-183 n=7204 b=0 e=0",
+    "YAW t=720279 ms=3200 run=1 v=7 age=60 y=33217 d=110 z=61 n=7206 b=0 e=0",
+    "YAW t=720479 ms=3400 run=1 v=7 age=61 y=33211 d=104 z=122 n=7208 b=0 e=0",
+    "YAW t=720679 ms=3600 run=1 v=7 age=61 y=33222 d=115 z=0 n=7210 b=0 e=0",
+    "YAW t=720879 ms=3800 run=1 v=7 age=61 y=33195 d=88 z=0 n=7212 b=0 e=0",
+    "YAW t=721079 ms=4000 run=1 v=7 age=61 y=33222 d=115 z=0 n=7214 b=0 e=0",
+    "YAW t=721279 ms=4200 run=1 v=7 age=61 y=33222 d=115 z=-244 n=7216 b=0 e=0",
+    "YAW t=721479 ms=4400 run=1 v=7 age=62 y=33217 d=110 z=183 n=7218 b=0 e=0",
+    "YAW t=721679 ms=4600 run=1 v=7 age=62 y=33222 d=115 z=244 n=7220 b=0 e=0",
+    "YAW t=721879 ms=4800 run=1 v=7 age=62 y=33239 d=132 z=0 n=7222 b=0 e=0",
+    "YAW t=722079 ms=5000 run=1 v=7 age=62 y=33266 d=159 z=244 n=7224 b=0 e=0",
+    "YAW t=722279 ms=5200 run=1 v=7 age=62 y=33228 d=121 z=122 n=7226 b=0 e=0",
+    "YAW t=722479 ms=5400 run=1 v=7 age=63 y=33222 d=115 z=0 n=7228 b=0 e=0",
+    "YAW t=722679 ms=5600 run=1 v=7 age=63 y=33222 d=115 z=0 n=7230 b=0 e=0",
+    "YAW t=722879 ms=5800 run=1 v=7 age=63 y=33222 d=115 z=0 n=7232 b=0 e=0",
+    "YAW t=723079 ms=6000 run=1 v=7 age=63 y=33222 d=115 z=0 n=7234 b=0 e=0",
+    "YAW t=723279 ms=6200 run=1 v=7 age=64 y=33222 d=115 z=0 n=7236 b=0 e=0",
+    "YAW t=723479 ms=6400 run=1 v=7 age=64 y=33222 d=115 z=0 n=7238 b=0 e=0",
+    "YAW t=723679 ms=6600 run=1 v=7 age=64 y=33222 d=115 z=0 n=7240 b=0 e=0",
+    "YAW t=723879 ms=6800 run=1 v=7 age=64 y=33222 d=115 z=0 n=7242 b=0 e=0",
+    "YAW t=724079 ms=7000 run=1 v=7 age=64 y=33222 d=115 z=0 n=7244 b=0 e=0",
+    "YAW t=724279 ms=7200 run=1 v=7 age=65 y=33222 d=115 z=0 n=7246 b=0 e=0",
+    "YAW t=724479 ms=7400 run=1 v=7 age=65 y=33222 d=115 z=0 n=7248 b=0 e=0",
+    "YAW t=724679 ms=7600 run=1 v=7 age=65 y=33222 d=115 z=0 n=7250 b=0 e=0",
+    "YAW t=724879 ms=7800 run=1 v=7 age=65 y=33222 d=115 z=0 n=7252 b=0 e=0",
+    "YAW t=725047 ms=7968 run=0 v=7 age=133 y=33222 d=115 z=0 n=7253 b=0 e=0"
+  ],
+  "post_motion_imu": {
+    "link": {
+      "baud": 115200,
+      "bytes": 319758,
+      "frames": 29068,
+      "bad_checksum": 0,
+      "uart_errors": 0
+    },
+    "angle": {
+      "valid": 1,
+      "samples": 7267,
+      "age_ms": 36,
+      "roll_mdeg": 285,
+      "pitch_mdeg": 653,
+      "yaw_mdeg": 33222
+    },
+    "gyro": {
+      "valid": 1,
+      "samples": 7267,
+      "age_ms": 37,
+      "z_mdps": 0
+    }
+  },
+  "final_stop_response": "STOP/DISABLE sent.\r\nRX: 01 FE E2 6B 01 F3 02 6B 02 FE E2 6B 02 F3 02 6B \r\nRX: 03 FE E2 6B 03 F3 02 6B 04 FE E2 6B 04 F3 02 6B \r\n",
+  "serial_closed": true,
+  "yaw_trace_summary": {
+    "records": 41,
+    "moving_records": 40,
+    "final_records": 1,
+    "first_ms": 0,
+    "last_ms": 7968,
+    "all_v_7": true,
+    "final_delta_deg": 0.115,
+    "max_delta_deg": 0.159,
+    "max_angle_age_ms": 133,
+    "new_bad_checksum": 0,
+    "new_uart_error_batches": 0,
+    "physical_stop_confirmed": true,
+    "distance_cm": null
+  }
+}
