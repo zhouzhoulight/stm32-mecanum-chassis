@@ -1,0 +1,83 @@
+{
+  "date": "2026-10-22",
+  "firmware_version": "v1.5",
+  "command": "forward_16000",
+  "profile": {
+    "rpm": 5,
+    "pulses": 16000,
+    "deadline_ms": 80000
+  },
+  "sample_count": 3,
+  "samples": [
+    {
+      "sample_id": "F01",
+      "distance_cm": 123.6,
+      "result_path": "build/calibration-forward-F01-v1.5-20261022-164158.result.json"
+    },
+    {
+      "sample_id": "F02",
+      "distance_cm": 124.0,
+      "result_path": "build/calibration-forward-F02-v1.5-20261022-165056.result.json"
+    },
+    {
+      "sample_id": "F03",
+      "distance_cm": 123.8,
+      "result_path": "build/calibration-forward-F03-v1.5-20261022-165722.result.json"
+    }
+  ],
+  "mean_distance_cm": 123.8,
+  "range_cm": 0.4,
+  "range_over_mean_percent": 0.32310177705977383,
+  "candidate_pulses_per_cm": 129.24071082390952,
+  "candidate_cm_per_pulse": 0.0077375,
+  "validated": false,
+  "applied_to_firmware": true,
+  "full_pulse_completion_verified": false,
+  "remaining_checks": [
+    "independent full pulse completion feedback",
+    "further lengths and repeatability before generic distance control"
+  ],
+  "proposed_100cm_validation_pulses": 12924,
+  "proposed_100cm_validation_implemented": true,
+  "proposed_100cm_validation_executed": true,
+  "note": "Three-sample range describes observed distance variation only; no positioning accuracy claim.",
+  "current_firmware_version": "v1.10",
+  "application_scope": "Fixed forward_1m and back_1m trials only; reverse trial borrows the forward initial pulse count.",
+  "generic_distance_control_enabled": false,
+  "one_metre_validation": {
+    "firmware_version": "v1.6",
+    "command": "forward_1m",
+    "pulses": 12924,
+    "target_distance_cm": 100.0,
+    "physical_distance_cm": 99.9,
+    "signed_error_cm": -0.1,
+    "result_path": "build/validation-forward-1m-V01-v1.6-20261022-170608.result.json",
+    "sample_count": 1,
+    "stop_disable_protocol_confirmed": true,
+    "full_pulse_completion_verified": false
+  },
+  "reverse_one_metre_trial": {
+    "firmware_version": "v1.7",
+    "command": "back_1m",
+    "pulses": 12924,
+    "target_distance_cm": 100.0,
+    "physical_distance_cm": 99.9,
+    "result_path": "build/validation-back-1m-B01-v1.7-20261022-171820.result.json",
+    "stop_disable_protocol_confirmed": true,
+    "full_pulse_completion_verified": false,
+    "signed_error_cm": -0.1,
+    "distance_unit_confirmed": "cm",
+    "physical_return_to_origin_observed": true,
+    "return_position_error_cm": null
+  },
+  "round_trip_observation": {
+    "forward_sample_id": "V01",
+    "reverse_sample_id": "B01",
+    "forward_distance_cm": 99.9,
+    "reverse_distance_cm": 99.9,
+    "user_reported_return_to_origin": true,
+    "return_position_error_cm": null,
+    "return_heading_error_deg": null,
+    "repeatability_validated": false
+  }
+}

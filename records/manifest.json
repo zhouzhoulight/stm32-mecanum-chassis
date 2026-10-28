@@ -40,5 +40,124 @@
     "source_sha256": "52fff388c48dc8bae87f7401f8c53f475b4f526f80606674d9c44f33004c25cf",
     "published_sha256": "52fff388c48dc8bae87f7401f8c53f475b4f526f80606674d9c44f33004c25cf",
     "redactions": "local filesystem paths and probe/serial identifiers only"
+  },
+  {
+    "file": "records/diagnostics/moving-diagnostic-F407-D01-v2.1.3-20261027-182233.txt",
+    "source_basename": "moving-diagnostic-F407-D01-v2.1.3-20261027-182233.txt",
+    "source_sha256": "dda9a37c88da7e68f48fd64adf7832e3912144a163a3fc0053daccf17f33b06f",
+    "published_sha256": "c484f669e92c648a04224b3ac5055414391105637225571bbdd692161ae38b2b",
+    "redactions": "local filesystem paths and probe/serial identifiers only"
+  },
+  {
+    "file": "records/diagnostics/moving-diagnostic-F407-D01-v2.1.3-20261027-182233.result.json",
+    "source_basename": "moving-diagnostic-F407-D01-v2.1.3-20261027-182233.result.json",
+    "source_sha256": "7166f4771dd4d027cf211f61fad80504d45edd57f314ebb55ff5b12a4ddbc602",
+    "published_sha256": "7166f4771dd4d027cf211f61fad80504d45edd57f314ebb55ff5b12a4ddbc602",
+    "redactions": "local filesystem paths and probe/serial identifiers only"
+  },
+  {
+    "file": "records/diagnostics/moving-diagnostic-F407-D01-v2.1.3-20261027-182233-moving-errors.csv",
+    "source_basename": "moving-diagnostic-F407-D01-v2.1.3-20261027-182233-moving-errors.csv",
+    "source_sha256": "f9a974bdbedb49019cac710ca824692f7cf6db5ca9df09e1beac07b60a77ab6b",
+    "published_sha256": "8f65c7341aa283ec6decf311ecb82d48676c75f93bf2831c7a46095b9c1f75d1",
+    "redactions": "local filesystem paths and probe/serial identifiers only"
+  },
+  {
+    "file": "records/diagnostics/moving-diagnostic-F407-D02-v2.1.5-20261027-183803.txt",
+    "source_basename": "moving-diagnostic-F407-D02-v2.1.5-20261027-183803.txt",
+    "source_sha256": "01e7ae3f4d8f78121a8974f88f6384b3d20b7c4fe83d44fd9fd315a532be38a9",
+    "published_sha256": "11ab0da90ed9d6b36e1a7a1e23ab9017ffed9375f2a7db656e490310a9e8e3b1",
+    "redactions": "local filesystem paths and probe/serial identifiers only"
+  },
+  {
+    "file": "records/diagnostics/moving-diagnostic-F407-D02-v2.1.5-20261027-183803.result.json",
+    "source_basename": "moving-diagnostic-F407-D02-v2.1.5-20261027-183803.result.json",
+    "source_sha256": "be4143604145b898b2220363bd56e57d2f408bf656291c8ee3bf677e88cf0817",
+    "published_sha256": "be4143604145b898b2220363bd56e57d2f408bf656291c8ee3bf677e88cf0817",
+    "redactions": "local filesystem paths and probe/serial identifiers only"
+  },
+  {
+    "file": "records/diagnostics/moving-diagnostic-F407-D02-v2.1.5-20261027-183803-details.csv",
+    "source_basename": "moving-diagnostic-F407-D02-v2.1.5-20261027-183803-details.csv",
+    "source_sha256": "e2b3bda6a6ab19e62e71255a390ea0877aa34ec20e64d9b0a3bcbf8f4f21c119",
+    "published_sha256": "d52b90e6548567dd968a32bc177bdf05035bb4c1ae07bf3a0f25783f4086b22c",
+    "redactions": "local filesystem paths and probe/serial identifiers only"
+  },
+  {
+    "file": "records/diagnostics/driver-parameters-F407-P01-v2.1.4-20261027-183402.txt",
+    "source_basename": "driver-parameters-F407-P01-v2.1.4-20261027-183402.txt",
+    "source_sha256": "b053aa0eb89646b4b10e053658aedd63db3fa829d63ff86aa0bb20b9100348f9",
+    "published_sha256": "9f38ff20fdeb51f0d0d2670f614607c06d19b369157b9dfd5aa6a1e39c6525d5",
+    "redactions": "local filesystem paths and probe/serial identifiers only"
+  },
+  {
+    "file": "records/diagnostics/driver-parameters-F407-P01-v2.1.4-20261027-183402.result.json",
+    "source_basename": "driver-parameters-F407-P01-v2.1.4-20261027-183402.result.json",
+    "source_sha256": "4e803e1c666abcaf08af0a3cc135f0e42f8001cb70565b8f47ae51eee90dfa9e",
+    "published_sha256": "4e803e1c666abcaf08af0a3cc135f0e42f8001cb70565b8f47ae51eee90dfa9e",
+    "redactions": "local filesystem paths and probe/serial identifiers only"
+  },
+  {
+    "file": "records/diagnostics/flash-f407-v2.1.5-20261027-183719.txt",
+    "source_basename": "flash-f407-v2.1.5-20261027-183719.txt",
+    "source_sha256": "c6ab796a5143c78446b0115982821e22bf78c1613abb154cbc0500f194a35df7",
+    "published_sha256": "04fb0119cf4611591434cbfbb18b747172f7b2330edb3a7e2fbdcf6cf7b96a37",
+    "redactions": "local filesystem paths and probe/serial identifiers only"
+  },
+  {
+    "file": "records/diagnostics/flash-f407-v2.1.5-20261027-183719.result.json",
+    "source_basename": "flash-f407-v2.1.5-20261027-183719.result.json",
+    "source_sha256": "668395471c0107e972abf72b3b0a33c35e56adbf53ca7472706dd9e075e3cad5",
+    "published_sha256": "668395471c0107e972abf72b3b0a33c35e56adbf53ca7472706dd9e075e3cad5",
+    "redactions": "local filesystem paths and probe/serial identifiers only"
+  },
+  {
+    "file": "records/current-state.json",
+    "source_basename": "current-f407-state.json",
+    "source_sha256": "cc7fed361527539119533823670838533c6f70e280a683599b8e11c674ec2839",
+    "published_sha256": "cc7fed361527539119533823670838533c6f70e280a683599b8e11c674ec2839",
+    "redactions": "local filesystem paths and probe/serial identifiers only"
+  },
+  {
+    "file": "records/history-f103/calibration-forward-summary-v1.5.json",
+    "source_basename": "calibration-forward-summary-v1.5.json",
+    "source_sha256": "b6514be6502b196ad7926f5fd8faddb45c0bc936b0fcd9d47204577bdb92adbb",
+    "published_sha256": "b6514be6502b196ad7926f5fd8faddb45c0bc936b0fcd9d47204577bdb92adbb",
+    "redactions": "local filesystem paths and probe/serial identifiers only"
+  },
+  {
+    "file": "records/history-f103/validation-forward-1m-V01-v1.6-20261022-170608.result.json",
+    "source_basename": "validation-forward-1m-V01-v1.6-20261022-170608.result.json",
+    "source_sha256": "3f139d024622f0d605a911adf5b4ee6b2840393a19e7ddd38c3ed0cca89512aa",
+    "published_sha256": "3f139d024622f0d605a911adf5b4ee6b2840393a19e7ddd38c3ed0cca89512aa",
+    "redactions": "local filesystem paths and probe/serial identifiers only"
+  },
+  {
+    "file": "records/history-f103/validation-back-1m-B01-v1.7-20261022-171820.result.json",
+    "source_basename": "validation-back-1m-B01-v1.7-20261022-171820.result.json",
+    "source_sha256": "9ffa55f30af848b1566f83235d9df00bdfcfb941af161c94a1043a70825cc005",
+    "published_sha256": "9ffa55f30af848b1566f83235d9df00bdfcfb941af161c94a1043a70825cc005",
+    "redactions": "local filesystem paths and probe/serial identifiers only"
+  },
+  {
+    "file": "records/history-f103/calibration-strafe-left-L05-v1.10-20261022-202457.result.json",
+    "source_basename": "calibration-strafe-left-L05-v1.10-20261022-202457.result.json",
+    "source_sha256": "71e451acf871bc637a654b67756c482d5df8132b55bd89d2d5dba5b912d69cc3",
+    "published_sha256": "71e451acf871bc637a654b67756c482d5df8132b55bd89d2d5dba5b912d69cc3",
+    "redactions": "local filesystem paths and probe/serial identifiers only"
+  },
+  {
+    "file": "records/history-f103/calibration-strafe-left-L05-v1.10-20261022-202457-yaw.csv",
+    "source_basename": "calibration-strafe-left-L05-v1.10-20261022-202457-yaw.csv",
+    "source_sha256": "2387dd4c8babd97a9637e5898feff50852bef7aa1756067d470a22dcd92514bc",
+    "published_sha256": "d61b204b91eb6d47532618237821a7ce5ef79e28c3eb949ecde58a3fb3f88d9e",
+    "redactions": "local filesystem paths and probe/serial identifiers only"
+  },
+  {
+    "file": "records/history-f103/calibration-strafe-left-L05-v1.10-20261022-202457-yaw-summary.json",
+    "source_basename": "calibration-strafe-left-L05-v1.10-20261022-202457-yaw-summary.json",
+    "source_sha256": "b15adf8eb22e2b62df639d6158657204bb90090294b3aa26f5430bf7c6603ddb",
+    "published_sha256": "b15adf8eb22e2b62df639d6158657204bb90090294b3aa26f5430bf7c6603ddb",
+    "redactions": "local filesystem paths and probe/serial identifiers only"
   }
 ]

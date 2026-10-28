@@ -1,0 +1,285 @@
+{
+  "date": "2026-10-27T18:38:03.251822+08:00",
+  "version": "v2.1.5",
+  "user_authorization": "User explicitly confirms stopped, left space clear, hands and cables clear and authorizes one new small moving diagnostic. Exactly one160-pulse left segment, 5RPM, 2.5s segment limit, no correction.",
+  "command": "left_diag_160",
+  "rpm": 5,
+  "nominal_pulses": 160,
+  "segments": 1,
+  "segment_base_pulses": 160,
+  "correction_limit_pulses": 16,
+  "stop_deadline_ms": 3000,
+  "kp_pulses_per_degree": 8,
+  "integral_enabled": false,
+  "heading_control": false,
+  "reset_sent": false,
+  "flash_written": false,
+  "sensor_config_writes": false,
+  "motion_command_sent": true,
+  "driver_probes": [
+    {
+      "round": 1,
+      "address": 1,
+      "valid": true,
+      "raw": "011F03826B"
+    },
+    {
+      "round": 1,
+      "address": 2,
+      "valid": true,
+      "raw": "021F03826B"
+    },
+    {
+      "round": 1,
+      "address": 3,
+      "valid": true,
+      "raw": "031F03826B"
+    },
+    {
+      "round": 1,
+      "address": 4,
+      "valid": true,
+      "raw": "041F03826B"
+    },
+    {
+      "round": 2,
+      "address": 1,
+      "valid": true,
+      "raw": "011F03826B"
+    },
+    {
+      "round": 2,
+      "address": 2,
+      "valid": true,
+      "raw": "021F03826B"
+    },
+    {
+      "round": 2,
+      "address": 3,
+      "valid": true,
+      "raw": "031F03826B"
+    },
+    {
+      "round": 2,
+      "address": 4,
+      "valid": true,
+      "raw": "041F03826B"
+    }
+  ],
+  "imu_samples": [
+    {
+      "link": {
+        "baud": 115200,
+        "bytes": 21208,
+        "frames": 1928,
+        "bad_checksum": 0,
+        "uart_errors": 0
+      },
+      "angle": {
+        "valid": 1,
+        "samples": 482,
+        "age_ms": 4,
+        "roll_mdeg": 269,
+        "pitch_mdeg": 796,
+        "yaw_mdeg": 34749
+      },
+      "gyro": {
+        "valid": 1,
+        "samples": 482,
+        "age_ms": 5,
+        "z_mdps": 0
+      }
+    },
+    {
+      "link": {
+        "baud": 115200,
+        "bytes": 21472,
+        "frames": 1952,
+        "bad_checksum": 0,
+        "uart_errors": 0
+      },
+      "angle": {
+        "valid": 1,
+        "samples": 488,
+        "age_ms": 11,
+        "roll_mdeg": 269,
+        "pitch_mdeg": 796,
+        "yaw_mdeg": 34749
+      },
+      "gyro": {
+        "valid": 1,
+        "samples": 488,
+        "age_ms": 12,
+        "z_mdps": 0
+      }
+    },
+    {
+      "link": {
+        "baud": 115200,
+        "bytes": 21736,
+        "frames": 1976,
+        "bad_checksum": 0,
+        "uart_errors": 0
+      },
+      "angle": {
+        "valid": 1,
+        "samples": 494,
+        "age_ms": 17,
+        "roll_mdeg": 263,
+        "pitch_mdeg": 796,
+        "yaw_mdeg": 34749
+      },
+      "gyro": {
+        "valid": 1,
+        "samples": 494,
+        "age_ms": 18,
+        "z_mdps": 0
+      }
+    }
+  ],
+  "physical_observation": {
+    "user_report": "已停稳，四个轮子都转了一小段",
+    "stopped": true,
+    "all_four_wheels_moved": true,
+    "distance_measured": false
+  },
+  "motion_raw_response": "HOLD DIAG START: exactly one160-pulse left segment; 5RPM; no yaw correction; flags/error/RPM/target/setpoint while active.\r\nYAW t=50178 ms=0 run=1 v=7 age=47 y=34749 d=0 z=0 n=502 b=0 e=0\r\nHOLD FLAG id=1 raw=130\r\nRX: 01 3A 82 6B \r\nHOLD FLAG id=2 raw=130\r\nRX: 02 3A 82 6B \r\nHOLD FLAG id=3 raw=130\r\nRX: 03 3A 82 6B \r\nHOLD FLAG id=4 raw=130\r\nRX: 04 3A 82 6B \r\nRX: 01 F3 02 6B 02 F3 02 6B 03 F3 02 6B 04 F3 02 6B \r\nHOLD SEG n=1 delta_mdeg=0 c=0 front=160 rear=160\r\nRX: 01 FD 02 6B 02 FD 02 6B 03 FD 02 6B 04 FD 02 6B \r\nYAW t=50378 ms=200 run=1 v=7 age=41 y=34749 d=0 z=0 n=504 b=0 e=0\r\nRX: 01 3A 81 6B \r\nHOLD SAMPLE ms=311 id=1 flags=129 sign=1 error_counts=122\r\nRX: 01 37 01 00 00 00 7A 6B \r\nHOLD DETAIL ms=336 id=1 op=53 sign=1 value=6\r\nRX: 01 35 01 00 06 6B \r\nHOLD DETAIL ms=361 id=1 op=51 sign=1 value=393096\r\nRX: 01 33 01 00 05 FF 88 6B \r\nHOLD DETAIL ms=386 id=1 op=52 sign=1 value=391129\r\nRX: 01 34 01 00 05 F7 D9 6B \r\nRX: 02 3A 81 6B \r\nYAW t=50578 ms=400 run=1 v=7 age=47 y=34782 d=33 z=244 n=506 b=0 e=0\r\nHOLD SAMPLE ms=436 id=2 flags=129 sign=0 error_counts=133\r\nRX: 02 37 00 00 00 00 85 6B \r\nHOLD DETAIL ms=461 id=2 op=53 sign=0 value=4\r\nRX: 02 35 00 00 04 6B \r\nHOLD DETAIL ms=486 id=2 op=51 sign=0 value=279702\r\nRX: 02 33 00 00 04 44 96 6B \r\nHOLD DETAIL ms=511 id=2 op=52 sign=0 value=278512\r\nRX: 02 34 00 00 04 3F F0 6B \r\nRX: 03 3A 81 6B \r\nHOLD SAMPLE ms=561 id=3 flags=129 sign=0 error_counts=76\r\nRX: 03 37 00 00 00 00 4C 6B \r\nHOLD DETAIL ms=586 id=3 op=53 sign=0 value=0\r\nRX: 03 35 00 00 00 6B \r\nHOLD DETAIL ms=611 id=3 op=51 sign=0 value=385035\r\nRX: 03 33 00 00 05 E0 0B 6B \r\nYAW t=50779 ms=601 run=1 v=7 age=48 y=34760 d=11 z=1037 n=508 b=0 e=0\r\nHOLD DETAIL ms=636 id=3 op=52 sign=0 value=384618\r\nRX: 03 34 00 00 05 DE 6A 6B \r\nRX: 04 3A 81 6B \r\nHOLD SAMPLE ms=686 id=4 flags=129 sign=1 error_counts=112\r\nRX: 04 37 01 00 00 00 70 6B \r\nHOLD DETAIL ms=711 id=4 op=53 sign=0 value=0\r\nRX: 04 35 00 00 00 6B \r\nHOLD DETAIL ms=736 id=4 op=51 sign=1 value=275218\r\nRX: 04 33 01 00 04 33 12 6B \r\nHOLD DETAIL ms=761 id=4 op=52 sign=1 value=275218\r\nRX: 04 34 01 00 04 33 12 6B \r\nRX: 01 3A 81 6B \r\nHOLD SAMPLE ms=799 id=1 flags=129 sign=1 error_counts=93\r\nRX: 01 37 01 00 00 00 5D 6B \r\nYAW t=50979 ms=801 run=1 v=7 age=44 y=34733 d=-16 z=366 n=510 b=0 e=0\r\nHOLD DETAIL ms=830 id=1 op=53 sign=0 value=0\r\nRX: 01 35 00 00 00 6B \r\nHOLD DETAIL ms=855 id=1 op=51 sign=1 value=393096\r\nRX: 01 33 01 00 05 FF 88 6B \r\nHOLD DETAIL ms=880 id=1 op=52 sign=1 value=393096\r\nRX: 01 34 01 00 05 FF 88 6B \r\nRX: 02 3A 81 6B \r\nHOLD SAMPLE ms=930 id=2 flags=129 sign=0 error_counts=63\r\nRX: 02 37 00 00 00 00 3F 6B \r\nHOLD DETAIL ms=955 id=2 op=53 sign=0 value=0\r\nRX: 02 35 00 00 00 6B \r\nHOLD DETAIL ms=980 id=2 op=51 sign=0 value=279702\r\nRX: 02 33 00 00 04 44 96 6B \r\nHOLD DETAIL ms=1005 id=2 op=52 sign=0 value=279702\r\nRX: 02 34 00 00 04 44 96 6B \r\nYAW t=51179 ms=1001 run=1 v=7 age=49 y=34733 d=-16 z=0 n=512 b=0 e=0\r\nRX: 03 3A 81 6B \r\nHOLD SAMPLE ms=1055 id=3 flags=129 sign=0 error_counts=68\r\nRX: 03 37 00 00 00 00 44 6B \r\nHOLD DETAIL ms=1080 id=3 op=53 sign=0 value=0\r\nRX: 03 35 00 00 00 6B \r\nHOLD DETAIL ms=1105 id=3 op=51 sign=0 value=385035\r\nRX: 03 33 00 00 05 E0 0B 6B \r\nHOLD DETAIL ms=1130 id=3 op=52 sign=0 value=385035\r\nRX: 03 34 00 00 05 E0 0B 6B \r\nRX: 04 3A 81 6B \r\nHOLD SAMPLE ms=1180 id=4 flags=129 sign=1 error_counts=115\r\nRX: 04 37 01 00 00 00 73 6B \r\nHOLD DETAIL ms=1205 id=4 op=53 sign=0 value=0\r\nRX: 04 35 00 00 00 6B \r\nYAW t=51379 ms=1201 run=1 v=7 age=49 y=34733 d=-16 z=0 n=514 b=0 e=0\r\nHOLD DETAIL ms=1230 id=4 op=51 sign=1 value=275218\r\nRX: 04 33 01 00 04 33 12 6B \r\nHOLD DETAIL ms=1255 id=4 op=52 sign=1 value=275218\r\nRX: 04 34 01 00 04 33 12 6B \r\nRX: 01 3A 81 6B \r\nHOLD SAMPLE ms=1293 id=1 flags=129 sign=1 error_counts=89\r\nRX: 01 37 01 00 00 00 59 6B \r\nHOLD DETAIL ms=1318 id=1 op=53 sign=0 value=0\r\nRX: 01 35 00 00 00 6B \r\nHOLD DETAIL ms=1343 id=1 op=51 sign=1 value=393096\r\nRX: 01 33 01 00 05 FF 88 6B \r\nHOLD DETAIL ms=1368 id=1 op=52 sign=1 value=393096\r\nRX: 01 34 01 00 05 FF 88 6B \r\nRX: 02 3A 81 6B \r\nYAW t=51579 ms=1401 run=1 v=7 age=43 y=34733 d=-16 z=0 n=516 b=0 e=0\r\nHOLD SAMPLE ms=1424 id=2 flags=129 sign=0 error_counts=59\r\nRX: 02 37 00 00 00 00 3B 6B \r\nHOLD DETAIL ms=1443 id=2 op=53 sign=0 value=0\r\nRX: 02 35 00 00 00 6B \r\nHOLD DETAIL ms=1468 id=2 op=51 sign=0 value=279702\r\nRX: 02 33 00 00 04 44 96 6B \r\nHOLD DETAIL ms=1493 id=2 op=52 sign=0 value=279702\r\nRX: 02 34 00 00 04 44 96 6B \r\nRX: 03 3A 81 6B \r\nHOLD SAMPLE ms=1543 id=3 flags=129 sign=0 error_counts=68\r\nRX: 03 37 00 00 00 00 44 6B \r\nHOLD DETAIL ms=1568 id=3 op=53 sign=0 value=0\r\nRX: 03 35 00 00 00 6B \r\nHOLD DETAIL ms=1593 id=3 op=51 sign=0 value=385035\r\nRX: 03 33 00 00 05 E0 0B 6B \r\nYAW t=51779 ms=1601 run=1 v=7 age=44 y=34733 d=-16 z=0 n=518 b=0 e=0\r\nHOLD DETAIL ms=1624 id=3 op=52 sign=0 value=385035\r\nRX: 03 34 00 00 05 E0 0B 6B \r\nRX: 04 3A 81 6B \r\nHOLD SAMPLE ms=1668 id=4 flags=129 sign=1 error_counts=111\r\nRX: 04 37 01 00 00 00 6F 6B \r\nHOLD DETAIL ms=1693 id=4 op=53 sign=0 value=0\r\nRX: 04 35 00 00 00 6B \r\nHOLD DETAIL ms=1718 id=4 op=51 sign=1 value=275218\r\nRX: 04 33 01 00 04 33 12 6B \r\nHOLD DETAIL ms=1743 id=4 op=52 sign=1 value=275218\r\nRX: 04 34 01 00 04 33 12 6B \r\nRX: 01 3A 81 6B \r\nHOLD SAMPLE ms=1781 id=1 flags=129 sign=1 error_counts=89\r\nRX: 01 37 01 00 00 00 59 6B \r\nHOLD DETAIL ms=1806 id=1 op=53 sign=0 value=0\r\nRX: 01 35 00 00 00 6B \r\nYAW t=51979 ms=1801 run=1 v=7 age=50 y=34733 d=-16 z=0 n=520 b=0 e=0\r\nHOLD DETAIL ms=1831 id=1 op=51 sign=1 value=393096\r\nRX: 01 33 01 00 05 FF 88 6B \r\nHOLD DETAIL ms=1856 id=1 op=52 sign=1 value=393096\r\nRX: 01 34 01 00 05 FF 88 6B \r\nRX: 02 3A 81 6B \r\nHOLD SAMPLE ms=1906 id=2 flags=129 sign=0 error_counts=59\r\nRX: 02 37 00 00 00 00 3B 6B \r\nHOLD DETAIL ms=1931 id=2 op=53 sign=0 value=0\r\nRX: 02 35 00 00 00 6B \r\nHOLD DETAIL ms=1956 id=2 op=51 sign=0 value=279702\r\nRX: 02 33 00 00 04 44 96 6B \r\nHOLD DETAIL ms=1981 id=2 op=52 sign=0 value=279702\r\nRX: 02 34 00 00 04 44 96 6B \r\nRX: 03 3A 81 6B \r\nYAW t=52179 ms=2001 run=1 v=7 age=50 y=34733 d=-16 z=0 n=522 b=0 e=0\r\nHOLD SAMPLE ms=2031 id=3 flags=129 sign=0 error_counts=68\r\nRX: 03 37 00 00 00 00 44 6B \r\nHOLD DETAIL ms=2056 id=3 op=53 sign=0 value=0\r\nRX: 03 35 00 00 00 6B \r\nHOLD DETAIL ms=2081 id=3 op=51 sign=0 value=385035\r\nRX: 03 33 00 00 05 E0 0B 6B \r\nHOLD DETAIL ms=2106 id=3 op=52 sign=0 value=385035\r\nRX: 03 34 00 00 05 E0 0B 6B \r\nRX: 04 3A 81 6B \r\nHOLD SAMPLE ms=2156 id=4 flags=129 sign=1 error_counts=111\r\nRX: 04 37 01 00 00 00 6F 6B \r\nHOLD DETAIL ms=2181 id=4 op=53 sign=0 value=0\r\nRX: 04 35 00 00 00 6B \r\nHOLD DETAIL ms=2206 id=4 op=51 sign=1 value=275218\r\nRX: 04 33 01 00 04 33 12 6B \r\nYAW t=52379 ms=2201 run=1 v=7 age=50 y=34733 d=-16 z=0 n=524 b=0 e=0\r\nHOLD DETAIL ms=2231 id=4 op=52 sign=1 value=275218\r\nRX: 04 34 01 00 04 33 12 6B \r\nRX: 01 3A 81 6B \r\nHOLD SAMPLE ms=2269 id=1 flags=129 sign=1 error_counts=89\r\nRX: 01 37 01 00 00 00 59 6B \r\nHOLD DETAIL ms=2294 id=1 op=53 sign=0 value=0\r\nRX: 01 35 00 00 00 6B \r\nHOLD DETAIL ms=2319 id=1 op=51 sign=1 value=393096\r\nRX: 01 33 01 00 05 FF 88 6B \r\nHOLD DETAIL ms=2344 id=1 op=52 sign=1 value=393096\r\nRX: 01 34 01 00 05 FF 88 6B \r\nRX: 02 3A 81 6B \r\nHOLD SAMPLE ms=2394 id=2 flags=129 sign=0 error_counts=59\r\nRX: 02 37 00 00 00 00 3B 6B \r\nYAW t=52580 ms=2402 run=1 v=7 age=50 y=34733 d=-16 z=0 n=526 b=0 e=0\r\nHOLD DETAIL ms=2425 id=2 op=53 sign=0 value=0\r\nRX: 02 35 00 00 00 6B \r\nHOLD DETAIL ms=2444 id=2 op=51 sign=0 value=279702\r\nRX: 02 33 00 00 04 44 96 6B \r\nHOLD DETAIL ms=2469 id=2 op=52 sign=0 value=279702\r\nRX: 02 34 00 00 04 44 96 6B \r\nRX: 03 3A 81 6B \r\nHOLD SAMPLE ms=2519 id=3 flags=129 sign=0 error_counts=68\r\nRX: 03 37 00 00 00 00 44 6B \r\nHOLD DETAIL ms=2544 id=3 op=53 sign=0 value=0\r\nRX: 03 35 00 00 00 6B \r\nHOLD DETAIL ms=2569 id=3 op=51 sign=0 value=385035\r\nRX: 03 33 00 00 05 E0 0B 6B \r\nHOLD DETAIL ms=2594 id=3 op=52 sign=0 value=385035\r\nRX: 03 34 00 00 05 E0 0B 6B \r\nYAW t=52780 ms=2602 run=1 v=7 age=50 y=34733 d=-16 z=0 n=528 b=0 e=0\r\nRX: 04 3A 81 6B \r\nHOLD SAMPLE ms=2644 id=4 flags=129 sign=1 error_counts=111\r\nRX: 04 37 01 00 00 00 6F 6B \r\nHOLD STOP: segment deadline; stop/disable sent. Observe actual vehicle.\r\nYAW t=52867 ms=2689 run=0 v=7 age=137 y=34733 d=-16 z=0 n=528 b=0 e=0\r\nRX: 01 FE 02 6B 01 F3 02 6B 02 FE 02 6B 02 F3 02 6B \r\nRX: 03 FE 02 6B 03 F3 02 6B 04 FE 02 6B 04 F3 02 6B \r\n",
+  "stop_reason": "segment deadline",
+  "segment_records": [
+    "HOLD SEG n=1 delta_mdeg=0 c=0 front=160 rear=160"
+  ],
+  "yaw_trace_lines": [
+    "YAW t=50178 ms=0 run=1 v=7 age=47 y=34749 d=0 z=0 n=502 b=0 e=0",
+    "YAW t=50378 ms=200 run=1 v=7 age=41 y=34749 d=0 z=0 n=504 b=0 e=0",
+    "YAW t=50578 ms=400 run=1 v=7 age=47 y=34782 d=33 z=244 n=506 b=0 e=0",
+    "YAW t=50779 ms=601 run=1 v=7 age=48 y=34760 d=11 z=1037 n=508 b=0 e=0",
+    "YAW t=50979 ms=801 run=1 v=7 age=44 y=34733 d=-16 z=366 n=510 b=0 e=0",
+    "YAW t=51179 ms=1001 run=1 v=7 age=49 y=34733 d=-16 z=0 n=512 b=0 e=0",
+    "YAW t=51379 ms=1201 run=1 v=7 age=49 y=34733 d=-16 z=0 n=514 b=0 e=0",
+    "YAW t=51579 ms=1401 run=1 v=7 age=43 y=34733 d=-16 z=0 n=516 b=0 e=0",
+    "YAW t=51779 ms=1601 run=1 v=7 age=44 y=34733 d=-16 z=0 n=518 b=0 e=0",
+    "YAW t=51979 ms=1801 run=1 v=7 age=50 y=34733 d=-16 z=0 n=520 b=0 e=0",
+    "YAW t=52179 ms=2001 run=1 v=7 age=50 y=34733 d=-16 z=0 n=522 b=0 e=0",
+    "YAW t=52379 ms=2201 run=1 v=7 age=50 y=34733 d=-16 z=0 n=524 b=0 e=0",
+    "YAW t=52580 ms=2402 run=1 v=7 age=50 y=34733 d=-16 z=0 n=526 b=0 e=0",
+    "YAW t=52780 ms=2602 run=1 v=7 age=50 y=34733 d=-16 z=0 n=528 b=0 e=0",
+    "YAW t=52867 ms=2689 run=0 v=7 age=137 y=34733 d=-16 z=0 n=528 b=0 e=0"
+  ],
+  "nominal_pulse_budget_completed": false,
+  "hold_status_after": "HOLD active=0 armed=0 completed=0 total=160 delta_mdeg=-11 correction=0; segmented P=8 pulses/deg cap=16/160 RPM=5\r\n",
+  "post_imu": {
+    "link": {
+      "baud": 115200,
+      "bytes": 23848,
+      "frames": 2168,
+      "bad_checksum": 0,
+      "uart_errors": 0
+    },
+    "angle": {
+      "valid": 1,
+      "samples": 542,
+      "age_ms": 47,
+      "roll_mdeg": 285,
+      "pitch_mdeg": 823,
+      "yaw_mdeg": 34744
+    },
+    "gyro": {
+      "valid": 1,
+      "samples": 542,
+      "age_ms": 48,
+      "z_mdps": 0
+    }
+  },
+  "final_stop_reply": "STOP/DISABLE sent.\r\nRX: 01 FE E2 6B 01 F3 02 6B 02 FE E2 6B 02 F3 02 6B \r\nRX: 03 FE E2 6B 03 F3 02 6B 04 FE E2 6B 04 F3 02 6B \r\n",
+  "serial_closed": true,
+  "moving_detail_summary": {
+    "1": {
+      "last_error_counts": -89,
+      "last_error_degrees": -0.4888916015625,
+      "last_flags": "0x81",
+      "reached_seen": false,
+      "stall_bit_seen": false,
+      "last_speed_rpm": 0,
+      "last_target_counts": -393096,
+      "last_setpoint_counts": -393096,
+      "target_equals_setpoint": true,
+      "last_speed_sample_ms": 2294,
+      "last_target_sample_ms": 2319,
+      "last_setpoint_sample_ms": 2344,
+      "sample_count": 20
+    },
+    "2": {
+      "last_error_counts": 59,
+      "last_error_degrees": 0.3240966796875,
+      "last_flags": "0x81",
+      "reached_seen": false,
+      "stall_bit_seen": false,
+      "last_speed_rpm": 0,
+      "last_target_counts": 279702,
+      "last_setpoint_counts": 279702,
+      "target_equals_setpoint": true,
+      "last_speed_sample_ms": 2425,
+      "last_target_sample_ms": 2444,
+      "last_setpoint_sample_ms": 2469,
+      "sample_count": 20
+    },
+    "3": {
+      "last_error_counts": 68,
+      "last_error_degrees": 0.37353515625,
+      "last_flags": "0x81",
+      "reached_seen": false,
+      "stall_bit_seen": false,
+      "last_speed_rpm": 0,
+      "last_target_counts": 385035,
+      "last_setpoint_counts": 385035,
+      "target_equals_setpoint": true,
+      "last_speed_sample_ms": 2544,
+      "last_target_sample_ms": 2569,
+      "last_setpoint_sample_ms": 2594,
+      "sample_count": 20
+    },
+    "4": {
+      "last_error_counts": -111,
+      "last_error_degrees": -0.6097412109375,
+      "last_flags": "0x81",
+      "reached_seen": false,
+      "stall_bit_seen": false,
+      "last_speed_rpm": 0,
+      "last_target_counts": -275218,
+      "last_setpoint_counts": -275218,
+      "target_equals_setpoint": true,
+      "last_speed_sample_ms": 2181,
+      "last_target_sample_ms": 2206,
+      "last_setpoint_sample_ms": 2231,
+      "sample_count": 17
+    }
+  },
+  "motion_ack_addresses": [
+    1,
+    2,
+    3,
+    4
+  ],
+  "timed_stop_ack_addresses": [
+    1,
+    2,
+    3,
+    4
+  ],
+  "timed_disable_ack_addresses": [
+    1,
+    2,
+    3,
+    4
+  ],
+  "actual_position_segments": 1,
+  "actual_base_pulses_commanded": 160,
+  "applied_heading_correction": 0,
+  "trajectory_completion_inferred_from_driver_samples_only": true,
+  "yaw_summary": {
+    "record_count": 15,
+    "final_delta_mdeg": -16,
+    "max_age_ms": 137,
+    "all_v7": true
+  }
+}

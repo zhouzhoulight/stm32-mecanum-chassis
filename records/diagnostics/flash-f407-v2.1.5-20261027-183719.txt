@@ -1,0 +1,40 @@
+TX: stop
+STOP/DISABLE sent.
+RX: 01 FE E2 6B 01 F3 02 6B 02 FE E2 6B 02 F3 02 6B 
+RX: 03 FE E2 6B 03 F3 02 6B 04 FE E2 6B 04 F3 02 6B 
+TX: status
+STM32F407VET6 test | DEVID=0x413 | Flash=512 KiB
+HSE=25MHz | HCLK=168000000 Hz | uptime=281768 ms
+Console: USART1 PA9/PA10 | Motor: UART4 PA0/PA1 | 115200 8N1
+Wheels: FL=4 FR=1 RL=3 RR=2 | all forward dir=1
+Firmware: v2.1.4 | Mecanum: X | Group: forward/back/left/right/cw/ccw
+Long group: forward_long/back_long/left_long/right_long/cw_long/ccw_long
+Long motion: *_long | RPM=5 | pulses=1600 | deadline_ms=8000
+Calibration: forward_16000 | RPM=5 | pulses=16000 | deadline_ms=80000
+Calibration strafe: left_16000/right_16000 | RPM=5 | pulses=16000 | deadline_ms=80000
+Validation: forward_1m | nominal_cm=100 | RPM=5 | pulses=12924 | deadline_ms=80000
+Validation: back_1m | nominal_cm=100 | RPM=5 | pulses=12924 | deadline_ms=80000
+IMU: USART3 PD8/PD9 | RX_ONLY | baud=115200 | heading control=OFF
+YAW trace: moving only | interval_ms=200 | heading control=OFF unless hold active
+HOLD active=0 armed=0 completed=0 total=0 delta_mdeg=34749 correction=0; segmented P=8 pulses/deg cap=16/160 RPM=5
+Serial closed.
+Setting SWD clock to 100 kHz
+Saved 22296 bytes to build/flash-f407-v2.1.5-20261027-183719.previous-v2.1.4.bin
+
+[---|---|---|---|---|---|---|---|---|----]
+[========================================]
+[---|---|---|---|---|---|---|---|---|----]
+[========================================]
+0000348 I Loading <LOCAL_PATH> [load_cmd]
+0000350 I Erasing... [loader]
+0001114 I Programming... [loader]
+0001642 I Erased 32768 bytes (2 sectors), programmed 22528 bytes (22 pages), identical 0 bytes (0 pages) at 17.03 kB/s [loader]
+
+Setting SWD clock to 100 kHz
+Saved 22512 bytes to build/flash-f407-v2.1.5-20261027-183719.bin
+
+Setting SWD clock to 100 kHz
+Resetting target with halt
+Successfully halted device on reset
+Successfully resumed device
+

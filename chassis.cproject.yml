@@ -32,6 +32,8 @@ project:
         - file: src/main.c
         - file: src/motor_test.c
         - file: src/wit_imu.c
+        - file: src/heading_hold.c
+        - file: include/heading_hold.h
         - file: src/yaw_trace.c
         - file: include/wit_imu.h
         - file: include/yaw_trace.h

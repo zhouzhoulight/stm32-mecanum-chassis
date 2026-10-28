@@ -1,0 +1,13 @@
+{
+  "date": "2026-10-27T18:37:19.482097+08:00",
+  "version": "v2.1.5",
+  "motion_sent": false,
+  "driver_parameters_written": false,
+  "sensor_config_written": false,
+  "flash_written": true,
+  "readback_matches": true,
+  "previous_readback_backup": "build/flash-f407-v2.1.5-20261027-183719.previous-v2.1.4.bin",
+  "sha256": "6a88b40a123daefeb76b78b4250e6acd8a6edbaf14e47974d10a32cbc896b109",
+  "bytes": 22512,
+  "reset_and_started": true
+}

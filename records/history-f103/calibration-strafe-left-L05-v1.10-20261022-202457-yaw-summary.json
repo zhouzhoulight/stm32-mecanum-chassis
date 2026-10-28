@@ -1,0 +1,77 @@
+{
+  "record_count": 400,
+  "all_valid_mask_7": true,
+  "interval_ms_min": 200,
+  "interval_ms_median": 200,
+  "interval_ms_max": 275,
+  "first_ms": 0,
+  "last_ms": 79968,
+  "final_yaw_delta_deg": 3.823,
+  "max_angle_age_ms": 160,
+  "angle_sample_count_first": 3593,
+  "angle_sample_count_last": 4392,
+  "sampled_times": {
+    "0": {
+      "actual_ms": 0,
+      "yaw_delta_deg": 0.0,
+      "yaw_deg": -15.726
+    },
+    "5": {
+      "actual_ms": 5000,
+      "yaw_delta_deg": 0.285,
+      "yaw_deg": -15.441
+    },
+    "10": {
+      "actual_ms": 10000,
+      "yaw_delta_deg": 0.813,
+      "yaw_deg": -14.913
+    },
+    "20": {
+      "actual_ms": 20035,
+      "yaw_delta_deg": 1.505,
+      "yaw_deg": -14.221
+    },
+    "30": {
+      "actual_ms": 30035,
+      "yaw_delta_deg": 2.081,
+      "yaw_deg": -13.645
+    },
+    "40": {
+      "actual_ms": 40087,
+      "yaw_delta_deg": 2.905,
+      "yaw_deg": -12.821
+    },
+    "50": {
+      "actual_ms": 49962,
+      "yaw_delta_deg": 3.828,
+      "yaw_deg": -11.898
+    },
+    "60": {
+      "actual_ms": 59962,
+      "yaw_delta_deg": 3.823,
+      "yaw_deg": -11.903
+    },
+    "70": {
+      "actual_ms": 69962,
+      "yaw_delta_deg": 3.823,
+      "yaw_deg": -11.903
+    },
+    "80": {
+      "actual_ms": 79968,
+      "yaw_delta_deg": 3.823,
+      "yaw_deg": -11.903
+    }
+  },
+  "first_at_least_1deg_ms": 15235,
+  "first_at_least_3deg_ms": 42962,
+  "first_at_least_95pct_final_ms": 46962,
+  "all_bad_checksum_counters": [
+    0
+  ],
+  "all_uart_error_counters": [
+    0
+  ],
+  "heading_control": false,
+  "independent_physical_angle_measurement": false,
+  "full_pulse_completion_verified": false
+}

@@ -43,7 +43,8 @@ def build_environment():
 
 def build():
     cbuild, gcc, env = build_environment()
-    subprocess.run([str(cbuild), 'chassis.csolution.yml', '--active', 'Board', '--update-rte'],
+    # Version snapshots may retain old file timestamps; do not reuse stale objects.
+    subprocess.run([str(cbuild), 'chassis.csolution.yml', '--active', 'Board', '--update-rte', '--rebuild'],
                    cwd=ROOT, env=env, check=True)
     output = ROOT/'out/chassis/Board/Debug'
     (ROOT/'build').mkdir(exist_ok=True)
@@ -143,8 +144,9 @@ def console(port):
     config[6][termios.VTIME] = 0
     allowed = {'help', 'status', 'imu', 'stop', 'jog 0', 'jog 1', 'arm all',
                'forward', 'back', 'left', 'right', 'cw', 'ccw',
+               'arm hold', 'left_diag_160', 'left_hold_1600', 'left_hold_16000', 'hold_keep', 'hold_status',
                'forward_long', 'back_long', 'left_long', 'right_long', 'cw_long', 'ccw_long',
-               'forward_16000', 'forward_1m', 'back_1m', 'left_16000', 'right_16000'} | {f'arm {i}' for i in range(1, 5)} | {f'probe {i}' for i in range(1, 5)} | {f'imu baud {baud}' for baud in (4800,9600,19200,38400,57600,115200,230400,460800,921600)}
+               'forward_16000', 'forward_1m', 'back_1m', 'left_16000', 'right_16000'} | {f'arm {i}' for i in range(1, 5)} | {f'probe {i}' for i in range(1, 5)} | {f'hold_diag {i}' for i in range(1, 5)} | {f'driver_config {i}' for i in range(1, 5)} | {f'driver_pid {i}' for i in range(1, 5)} | {f'imu baud {baud}' for baud in (4800,9600,19200,38400,57600,115200,230400,460800,921600)}
 
     def send(data):
         while data:

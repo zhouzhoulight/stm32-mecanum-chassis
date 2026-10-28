@@ -1,0 +1,126 @@
+TX: stop
+STOP/DISABLE sent.
+RX: 01 FE E2 6B 01 F3 02 6B 02 FE E2 6B 02 F3 02 6B 
+RX: 03 FE E2 6B 03 F3 02 6B 04 FE E2 6B 04 F3 02 6B 
+TX: status
+STM32F407VET6 test | DEVID=0x413 | Flash=512 KiB
+HSE=25MHz | HCLK=168000000 Hz | uptime=84852 ms
+Console: USART1 PA9/PA10 | Motor: UART4 PA0/PA1 | 115200 8N1
+Wheels: FL=4 FR=1 RL=3 RR=2 | all forward dir=1
+Firmware: v2.1.4 | Mecanum: X | Group: forward/back/left/right/cw/ccw
+Long group: forward_long/back_long/left_long/right_long/cw_long/ccw_long
+Long motion: *_long | RPM=5 | pulses=1600 | deadline_ms=8000
+Calibration: forward_16000 | RPM=5 | pulses=16000 | deadline_ms=80000
+Calibration strafe: left_16000/right_16000 | RPM=5 | pulses=16000 | deadline_ms=80000
+Validation: forward_1m | nominal_cm=100 | RPM=5 | pulses=12924 | deadline_ms=80000
+Validation: back_1m | nominal_cm=100 | RPM=5 | pulses=12924 | deadline_ms=80000
+IMU: USART3 PD8/PD9 | RX_ONLY | baud=115200 | heading control=OFF
+YAW trace: moving only | interval_ms=200 | heading control=OFF unless hold active
+HOLD active=0 armed=0 completed=0 total=0 delta_mdeg=34749 correction=0; segmented P=8 pulses/deg cap=16/160 RPM=5
+TX: probe 1
+PROBE: version query sent; no enable/motion. Waiting up to 500ms.
+PROBE OK: addressed version reply received. UART round trip works; see RX bytes.
+RX: 01 1F 03 82 6B 
+TX: driver_config 1
+DRIVER READ sent; fixed read-only command; no enable/motion.
+RX: 01 42 21 15 19 02 02 02 00 10 01 00 03 E8 09 60 
+RX: 13 88 05 07 01 00 01 01 00 08 08 98 07 D0 00 03 
+DRIVER READ OK id=1 op=66 bytes=33; raw bytes in RX log; no motion.
+RX: 6B 
+TX: driver_pid 1
+DRIVER READ sent; fixed read-only command; no enable/motion.
+DRIVER READ OK id=1 op=33 bytes=15; raw bytes in RX log; no motion.
+RX: 01 21 00 00 65 90 00 00 00 0A 00 00 65 90 6B 
+TX: probe 2
+PROBE: version query sent; no enable/motion. Waiting up to 500ms.
+PROBE OK: addressed version reply received. UART round trip works; see RX bytes.
+RX: 02 1F 03 82 6B 
+TX: driver_config 2
+DRIVER READ sent; fixed read-only command; no enable/motion.
+RX: 02 42 21 15 19 02 02 02 00 10 01 00 03 E8 09 60 
+RX: 13 88 05 07 02 00 01 01 00 08 08 98 07 D0 00 03 
+DRIVER READ OK id=2 op=66 bytes=33; raw bytes in RX log; no motion.
+RX: 6B 
+TX: driver_pid 2
+DRIVER READ sent; fixed read-only command; no enable/motion.
+DRIVER READ OK id=2 op=33 bytes=15; raw bytes in RX log; no motion.
+RX: 02 21 00 00 65 90 00 00 00 0A 00 00 65 90 6B 
+TX: probe 3
+PROBE: version query sent; no enable/motion. Waiting up to 500ms.
+PROBE OK: addressed version reply received. UART round trip works; see RX bytes.
+RX: 03 1F 03 82 6B 
+TX: driver_config 3
+DRIVER READ sent; fixed read-only command; no enable/motion.
+RX: 03 42 21 15 19 02 02 02 01 10 01 00 03 E8 09 60 
+RX: 13 88 05 07 03 00 01 01 00 08 08 98 07 D0 00 03 
+DRIVER READ OK id=3 op=66 bytes=33; raw bytes in RX log; no motion.
+RX: 6B 
+TX: driver_pid 3
+DRIVER READ sent; fixed read-only command; no enable/motion.
+DRIVER READ OK id=3 op=33 bytes=15; raw bytes in RX log; no motion.
+RX: 03 21 00 00 65 90 00 00 00 0A 00 00 65 90 6B 
+TX: probe 4
+PROBE: version query sent; no enable/motion. Waiting up to 500ms.
+PROBE OK: addressed version reply received. UART round trip works; see RX bytes.
+RX: 04 1F 03 82 6B 
+TX: driver_config 4
+DRIVER READ sent; fixed read-only command; no enable/motion.
+RX: 04 42 21 15 19 02 02 02 01 10 01 00 03 E8 09 60 
+RX: 13 88 05 02 04 00 01 01 00 08 08 98 07 D0 00 03 
+DRIVER READ OK id=4 op=66 bytes=33; raw bytes in RX log; no motion.
+RX: 6B 
+TX: driver_pid 4
+DRIVER READ sent; fixed read-only command; no enable/motion.
+DRIVER READ OK id=4 op=33 bytes=15; raw bytes in RX log; no motion.
+RX: 04 21 00 00 65 90 00 00 00 0A 00 00 65 90 6B 
+TX: driver_config 1
+DRIVER READ sent; fixed read-only command; no enable/motion.
+RX: 01 42 21 15 19 02 02 02 00 10 01 00 03 E8 09 60 
+RX: 13 88 05 07 01 00 01 01 00 08 08 98 07 D0 00 03 
+DRIVER READ OK id=1 op=66 bytes=33; raw bytes in RX log; no motion.
+RX: 6B 
+TX: driver_pid 1
+DRIVER READ sent; fixed read-only command; no enable/motion.
+DRIVER READ OK id=1 op=33 bytes=15; raw bytes in RX log; no motion.
+RX: 01 21 00 00 65 90 00 00 00 0A 00 00 65 90 6B 
+TX: driver_config 2
+DRIVER READ sent; fixed read-only command; no enable/motion.
+RX: 02 42 21 15 19 02 02 02 00 10 01 00 03 E8 09 60 
+RX: 13 88 05 07 02 00 01 01 00 08 08 98 07 D0 00 03 
+DRIVER READ OK id=2 op=66 bytes=33; raw bytes in RX log; no motion.
+RX: 6B 
+TX: driver_pid 2
+DRIVER READ sent; fixed read-only command; no enable/motion.
+DRIVER READ OK id=2 op=33 bytes=15; raw bytes in RX log; no motion.
+RX: 02 21 00 00 65 90 00 00 00 0A 00 00 65 90 6B 
+TX: driver_config 3
+DRIVER READ sent; fixed read-only command; no enable/motion.
+RX: 03 42 21 15 19 02 02 02 01 10 01 00 03 E8 09 60 
+RX: 13 88 05 07 03 00 01 01 00 08 08 98 07 D0 00 03 
+DRIVER READ OK id=3 op=66 bytes=33; raw bytes in RX log; no motion.
+RX: 6B 
+TX: driver_pid 3
+DRIVER READ sent; fixed read-only command; no enable/motion.
+DRIVER READ OK id=3 op=33 bytes=15; raw bytes in RX log; no motion.
+RX: 03 21 00 00 65 90 00 00 00 0A 00 00 65 90 6B 
+TX: driver_config 4
+DRIVER READ sent; fixed read-only command; no enable/motion.
+RX: 04 42 21 15 19 02 02 02 01 10 01 00 03 E8 09 60 
+RX: 13 88 05 02 04 00 01 01 00 08 08 98 07 D0 00 03 
+DRIVER READ OK id=4 op=66 bytes=33; raw bytes in RX log; no motion.
+RX: 6B 
+TX: driver_pid 4
+DRIVER READ sent; fixed read-only command; no enable/motion.
+DRIVER READ OK id=4 op=33 bytes=15; raw bytes in RX log; no motion.
+RX: 04 21 00 00 65 90 00 00 00 0A 00 00 65 90 6B 
+TX: imu
+IMU USART3 PD8/PD9 RX_ONLY | baud=115200 | bytes=43824 | frames=3984 | bad_checksum=0 | uart_errors=0
+IMU angle: valid=1 | samples=996 | age_ms=71 | roll_mdeg=263 | pitch_mdeg=802 | yaw_mdeg=34749
+IMU gyro: valid=1 | samples=996 | age_ms=72 | z_mdps=0
+TX: hold_status
+HOLD active=0 armed=0 completed=0 total=0 delta_mdeg=34749 correction=0; segmented P=8 pulses/deg cap=16/160 RPM=5
+TX: stop
+STOP/DISABLE sent.
+RX: 01 FE E2 6B 01 F3 02 6B 02 FE E2 6B 02 F3 02 6B 
+RX: 03 FE E2 6B 03 F3 02 6B 04 FE E2 6B 04 F3 02 6B 
+Serial closed.

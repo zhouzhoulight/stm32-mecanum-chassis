@@ -1,0 +1,48 @@
+{
+  "sample_id": "V01",
+  "firmware_version": "v1.6",
+  "command": "forward_1m",
+  "target_distance_cm": 100.0,
+  "motion_sent": true,
+  "timed_stop_logged": true,
+  "physical_distance_cm": 99.9,
+  "physical_yaw": null,
+  "physical_stop": true,
+  "profile": {
+    "rpm": 5,
+    "pulses": 12924,
+    "deadline_ms": 80000
+  },
+  "full_pulse_completion_verified": false,
+  "setup_confirmation": "User confirmed restored marked start, same heading and adequate clear ground.",
+  "driver_replies": {
+    "1": {
+      "enable_ACK02": true,
+      "position_ACK02": true,
+      "stop_ACK02": true
+    },
+    "2": {
+      "enable_ACK02": true,
+      "position_ACK02": true,
+      "stop_ACK02": true
+    },
+    "3": {
+      "enable_ACK02": true,
+      "position_ACK02": true,
+      "stop_ACK02": true
+    },
+    "4": {
+      "enable_ACK02": true,
+      "position_ACK02": true,
+      "stop_ACK02": true
+    }
+  },
+  "user_observation_quote": "99.9cm",
+  "signed_error_cm": -0.1,
+  "absolute_error_cm": 0.1,
+  "signed_error_mm": -1.0,
+  "signed_error_percent": -0.1,
+  "physical_drift_observation": null,
+  "measurement_note": "Single reported tape measurement; no repeatability or positioning accuracy guarantee.",
+  "physical_stop_observation_source": "User explicitly confirmed complete stop and marked current start before B01 reverse trial."
+}

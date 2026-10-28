@@ -1,0 +1,56 @@
+{
+  "sample_id": "B01",
+  "firmware_version": "v1.7",
+  "command": "back_1m",
+  "target_distance_cm": 100.0,
+  "motion_sent": true,
+  "timed_stop_logged": true,
+  "physical_distance_cm": 99.9,
+  "physical_yaw": null,
+  "physical_stop": true,
+  "profile": {
+    "rpm": 5,
+    "pulses": 12924,
+    "deadline_ms": 80000
+  },
+  "full_pulse_completion_verified": false,
+  "setup_confirmation": "User confirmed complete stop, marked current start and adequate rear clearance.",
+  "driver_replies": {
+    "1": {
+      "enable_ACK02": true,
+      "position_ACK02": true,
+      "stop_ACK02": true
+    },
+    "2": {
+      "enable_ACK02": true,
+      "position_ACK02": true,
+      "stop_ACK02": true
+    },
+    "3": {
+      "enable_ACK02": true,
+      "position_ACK02": true,
+      "stop_ACK02": true
+    },
+    "4": {
+      "enable_ACK02": true,
+      "position_ACK02": true,
+      "stop_ACK02": true
+    }
+  },
+  "motion_direction": "reverse",
+  "initial_pulses_source": "Borrowed fixed forward one-metre trial profile; reverse distance now user-reported after explicit unit correction.",
+  "user_observation_quote": "回到原点了99.9mm分毫不差",
+  "unit_correction_quote": "99.9 厘米，刚才单位写错了",
+  "distance_unit_confirmed": "cm",
+  "distance_unit_confirmation_pending": false,
+  "signed_error_cm": -0.1,
+  "absolute_error_cm": 0.1,
+  "signed_error_mm": -1.0,
+  "signed_error_percent": -0.1,
+  "physical_return_to_origin_observed": true,
+  "return_to_origin_observation_source": "User reported return to original point; no numerical residual measurement supplied.",
+  "return_position_error_cm": null,
+  "return_heading_error_deg": null,
+  "physical_drift_observation": null,
+  "physical_stop_observation_source": "User confirmed complete stop and marked lateral start before L01 left-strafe calibration."
+}

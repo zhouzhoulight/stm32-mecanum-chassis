@@ -1,6 +1,12 @@
 {
-  "version": "v2.0",
+  "archive_date": "2026-10-28",
+  "last_field_test_date": "2026-10-27",
+  "version": "v2.1.5",
   "preserved_application_source": [
+    {
+      "path": "src/heading_hold.c",
+      "sha256": "582e9bca191607d452e1417f4310345682dd64fdd7b214417c2e33faa6806cbe"
+    },
     {
       "path": "src/yaw_trace.c",
       "sha256": "9f4e8740116ccb474886f6452ca01d1c73f3763b573b8d5d7d17c133d376cbaa"
@@ -15,7 +21,7 @@
     },
     {
       "path": "src/main.c",
-      "sha256": "1548349f2d21ff2c75eeb3b6ca738ec39fc20bc30a05f520def17110562aa931"
+      "sha256": "d422366c666b379405ff05481690c0028b1bc5ac863e5987449a6644b056bf3d"
     },
     {
       "path": "src/system_stm32f4xx.c",
@@ -43,28 +49,36 @@
     },
     {
       "path": "include/motor_test.h",
-      "sha256": "f175562dd4d535ff4def21ff90884e2263303780ef132a31ea857ce1206fa9f1"
+      "sha256": "b5d7ce03298ba57cd995fcdbebc223daf8e1f2e740be7a0a34de7d3a54d51767"
     },
     {
       "path": "include/yaw_trace.h",
       "sha256": "b252b426f9f87b93daa8ba5845680df004da05eb810599a62fcea1bb3f0d1458"
     },
     {
+      "path": "include/heading_hold.h",
+      "sha256": "63bf0ecc1373b84741bb962b75f1c14a6222869afc11f977aef98f0e0e321139"
+    },
+    {
       "path": "include/LICENSE.txt",
       "sha256": "d5a162f3eaf2b7b6762f00700017cae5695ebbdce7932fead8316448baafd9c1"
     }
   ],
-  "archived_bin_sha256": "017eb5f29a0369bbd7a369ab620d6ba656e18c75b40c55eb8409ad96636c5e4f",
-  "rebuilt_bin_sha256": "017eb5f29a0369bbd7a369ab620d6ba656e18c75b40c55eb8409ad96636c5e4f",
+  "archived_bin_sha256": "6a88b40a123daefeb76b78b4250e6acd8a6edbaf14e47974d10a32cbc896b109",
+  "rebuilt_bin_sha256": "6a88b40a123daefeb76b78b4250e6acd8a6edbaf14e47974d10a32cbc896b109",
   "offline_checks": {
     "host_c_suites": [
       "motor",
       "imu",
-      "yaw_trace"
+      "yaw_trace",
+      "heading"
     ],
     "python_tool_tests": 7,
+    "python_driver_parameter_tests": 2,
     "cmsis_build": true,
     "elf_vectors_memory": true,
     "no_hardware_access": true
-  }
+  },
+  "original_board_readback_evidence": "records/diagnostics/flash-f407-v2.1.5-20261027-183719.result.json",
+  "publication_tool_change": "public scripts/project.py uses cbuild --rebuild to prevent stale objects across archived snapshots; MCU application sources unchanged"
 }

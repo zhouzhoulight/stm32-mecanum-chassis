@@ -3,6 +3,7 @@
 #include "chassis_config.h"
 #include "wit_imu.h"
 #include "yaw_trace.h"
+#include "heading_hold.h"
 #include <string.h>
 
 static UART_HandleTypeDef motor_uart, console_uart, imu_uart;
@@ -274,8 +275,9 @@ static void report_status(void)
     platform_log(" | deadline_ms="); log_number(VERIFY_BACK_1M_TIMEOUT_MS, 10);
     platform_log("\r\n");
     platform_log("IMU: USART3 PD8/PD9 | RX_ONLY | baud="); log_number(imu_uart.Init.BaudRate, 10);
-    platform_log(" | heading control=OFF\r\n");
-    platform_log("YAW trace: moving only | interval_ms=200 | heading control=OFF\r\n");
+    platform_log(hold_active() ? " | heading control=SEGMENTED_LEFT\r\n" : " | heading control=OFF\r\n");
+    platform_log("YAW trace: moving only | interval_ms=200 | heading control=OFF unless hold active\r\n");
+    hold_report();
 }
 
 int main(void)
@@ -285,6 +287,7 @@ int main(void)
     uart_init();
     imu_init();
     yaw_trace_init(&yaw_trace);
+    hold_init();
     /* 上电先发停止/失能，随后等待。这里没有自动行走程序。 */
     test_init();
     report_status();
@@ -298,6 +301,7 @@ int main(void)
             console_rx.fault = false;
             __enable_irq();
             used = 0; dropping = true;
+            hold_emergency_stop();
             test_fault();
         }
         if (motor_rx.fault) {
@@ -306,6 +310,7 @@ int main(void)
             motor_rx.fault = false;
             __enable_irq();
             /* 电机串口错误会停机，但不能吞掉独立 USART1 的诊断命令。 */
+            hold_emergency_stop();
             test_fault();
         }
         uint8_t c;
@@ -323,7 +328,8 @@ int main(void)
             if (c == '\r' || c == '\n') {
                 if (!dropping && used) {
                     line[used] = '\0';
-                    if (!strcmp(line, "status")) report_status();
+                    if (hold_command(line, HAL_GetTick())) { /* isolated heading mode */ }
+                    else if (!strcmp(line, "status")) report_status();
                     else if (handle_imu_command(line)) { /* 只读诊断不进入运动解析。 */ }
                     else test_command(line, HAL_GetTick());
                 }
@@ -331,7 +337,7 @@ int main(void)
             } else if (!dropping) {
                 if (c == 8 || c == 127) { if (used) --used; }
                 else if (c >= 32 && c <= 126 && used < sizeof(line)-1) line[used++] = (char)c;
-                else { used = 0; dropping = true; test_fault(); }
+                else { used = 0; dropping = true; hold_emergency_stop(); test_fault(); }
             }
         }
         /* 先处理已收到的 stop/串口错误，再处理到期的待发运动。 */
@@ -344,12 +350,14 @@ int main(void)
         const char digits[] = "0123456789ABCDEF";
         for (unsigned i = 0; i < 16 && pop(&motor_rx, &c); ++i) {
             test_motor_rx(c, HAL_GetTick());
+            hold_motor_rx(c, HAL_GetTick());
             hex[n++] = digits[c >> 4]; hex[n++] = digits[c & 15]; hex[n++] = ' ';
         }
         if (n > 4) { hex[n++] = '\r'; hex[n++] = '\n'; hex[n] = 0; platform_log(hex); }
         /* stop/错误/tick及电机收包先处理；日志不改运动参数或执行新动作。 */
+        hold_tick(HAL_GetTick());
         char trace_line[YAW_TRACE_LINE_CAPACITY];
-        if (yaw_trace_poll(&yaw_trace, HAL_GetTick(), test_is_moving(), imu_data(),
+        if (yaw_trace_poll(&yaw_trace, HAL_GetTick(), test_is_moving() || hold_active(), imu_data(),
                            trace_line, sizeof trace_line)) platform_log(trace_line);
     }
 }

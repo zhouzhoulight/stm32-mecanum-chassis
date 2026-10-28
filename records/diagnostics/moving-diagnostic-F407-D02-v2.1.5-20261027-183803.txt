@@ -1,0 +1,305 @@
+TX: 
+TX: stop
+STOP/DISABLE sent.
+RX: 01 FE E2 6B 01 F3 02 6B 02 FE E2 6B 02 F3 02 6B 
+RX: 03 FE E2 6B 03 F3 02 6B 04 FE E2 6B 04 F3 02 6B 
+TX: status
+STM32F407VET6 test | DEVID=0x413 | Flash=512 KiB
+HSE=25MHz | HCLK=168000000 Hz | uptime=40095 ms
+Console: USART1 PA9/PA10 | Motor: UART4 PA0/PA1 | 115200 8N1
+Wheels: FL=4 FR=1 RL=3 RR=2 | all forward dir=1
+Firmware: v2.1.5 | Mecanum: X | Group: forward/back/left/right/cw/ccw
+Long group: forward_long/back_long/left_long/right_long/cw_long/ccw_long
+Long motion: *_long | RPM=5 | pulses=1600 | deadline_ms=8000
+Calibration: forward_16000 | RPM=5 | pulses=16000 | deadline_ms=80000
+Calibration strafe: left_16000/right_16000 | RPM=5 | pulses=16000 | deadline_ms=80000
+Validation: forward_1m | nominal_cm=100 | RPM=5 | pulses=12924 | deadline_ms=80000
+Validation: back_1m | nominal_cm=100 | RPM=5 | pulses=12924 | deadline_ms=80000
+IMU: USART3 PD8/PD9 | RX_ONLY | baud=115200 | heading control=OFF
+YAW trace: moving only | interval_ms=200 | heading control=OFF unless hold active
+HOLD active=0 armed=0 completed=0 total=0 delta_mdeg=34749 correction=0; segmented P=8 pulses/deg cap=16/160 RPM=5
+TX: status
+STM32F407VET6 test | DEVID=0x413 | Flash=512 KiB
+HSE=25MHz | HCLK=168000000 Hz | uptime=40897 ms
+Console: USART1 PA9/PA10 | Motor: UART4 PA0/PA1 | 115200 8N1
+Wheels: FL=4 FR=1 RL=3 RR=2 | all forward dir=1
+Firmware: v2.1.5 | Mecanum: X | Group: forward/back/left/right/cw/ccw
+Long group: forward_long/back_long/left_long/right_long/cw_long/ccw_long
+Long motion: *_long | RPM=5 | pulses=1600 | deadline_ms=8000
+Calibration: forward_16000 | RPM=5 | pulses=16000 | deadline_ms=80000
+Calibration strafe: left_16000/right_16000 | RPM=5 | pulses=16000 | deadline_ms=80000
+Validation: forward_1m | nominal_cm=100 | RPM=5 | pulses=12924 | deadline_ms=80000
+Validation: back_1m | nominal_cm=100 | RPM=5 | pulses=12924 | deadline_ms=80000
+IMU: USART3 PD8/PD9 | RX_ONLY | baud=115200 | heading control=OFF
+YAW trace: moving only | interval_ms=200 | heading control=OFF unless hold active
+HOLD active=0 armed=0 completed=0 total=0 delta_mdeg=34749 correction=0; segmented P=8 pulses/deg cap=16/160 RPM=5
+TX: probe 1
+PROBE: version query sent; no enable/motion. Waiting up to 500ms.
+PROBE OK: addressed version reply received. UART round trip works; see RX bytes.
+RX: 01 1F 03 82 6B 
+TX: probe 2
+PROBE: version query sent; no enable/motion. Waiting up to 500ms.
+PROBE OK: addressed version reply received. UART round trip works; see RX bytes.
+RX: 02 1F 03 82 6B 
+TX: probe 3
+PROBE: version query sent; no enable/motion. Waiting up to 500ms.
+PROBE OK: addressed version reply received. UART round trip works; see RX bytes.
+RX: 03 1F 03 82 6B 
+TX: probe 4
+PROBE: version query sent; no enable/motion. Waiting up to 500ms.
+PROBE OK: addressed version reply received. UART round trip works; see RX bytes.
+RX: 04 1F 03 82 6B 
+TX: probe 1
+PROBE: version query sent; no enable/motion. Waiting up to 500ms.
+PROBE OK: addressed version reply received. UART round trip works; see RX bytes.
+RX: 01 1F 03 82 6B 
+TX: probe 2
+PROBE: version query sent; no enable/motion. Waiting up to 500ms.
+PROBE OK: addressed version reply received. UART round trip works; see RX bytes.
+RX: 02 1F 03 82 6B 
+TX: probe 3
+PROBE: version query sent; no enable/motion. Waiting up to 500ms.
+PROBE OK: addressed version reply received. UART round trip works; see RX bytes.
+RX: 03 1F 03 82 6B 
+TX: probe 4
+PROBE: version query sent; no enable/motion. Waiting up to 500ms.
+PROBE OK: addressed version reply received. UART round trip works; see RX bytes.
+RX: 04 1F 03 82 6B 
+TX: imu
+IMU USART3 PD8/PD9 RX_ONLY | baud=115200 | bytes=21208 | frames=1928 | bad_checksum=0 | uart_errors=0
+IMU angle: valid=1 | samples=482 | age_ms=4 | roll_mdeg=269 | pitch_mdeg=796 | yaw_mdeg=34749
+IMU gyro: valid=1 | samples=482 | age_ms=5 | z_mdps=0
+TX: imu
+IMU USART3 PD8/PD9 RX_ONLY | baud=115200 | bytes=21472 | frames=1952 | bad_checksum=0 | uart_errors=0
+IMU angle: valid=1 | samples=488 | age_ms=11 | roll_mdeg=269 | pitch_mdeg=796 | yaw_mdeg=34749
+IMU gyro: valid=1 | samples=488 | age_ms=12 | z_mdps=0
+TX: imu
+IMU USART3 PD8/PD9 RX_ONLY | baud=115200 | bytes=21736 | frames=1976 | bad_checksum=0 | uart_errors=0
+IMU angle: valid=1 | samples=494 | age_ms=17 | roll_mdeg=263 | pitch_mdeg=796 | yaw_mdeg=34749
+IMU gyro: valid=1 | samples=494 | age_ms=18 | z_mdps=0
+TX: arm hold
+HOLD ARMED for 10s; no motion. Use left_hold_1600 or left_hold_16000.
+TX: left_diag_160
+HOLD DIAG START: exactly one160-pulse left segment; 5RPM; no yaw correction; flags/error/RPM/target/setpoint while active.
+YAW t=50178 ms=0 run=1 v=7 age=47 y=34749 d=0 z=0 n=502 b=0 e=0
+HOLD FLAG id=1 raw=130
+RX: 01 3A 82 6B 
+HOLD FLAG id=2 raw=130
+RX: 02 3A 82 6B 
+HOLD FLAG id=3 raw=130
+RX: 03 3A 82 6B 
+HOLD FLAG id=4 raw=130
+RX: 04 3A 82 6B 
+RX: 01 F3 02 6B 02 F3 02 6B 03 F3 02 6B 04 F3 02 6B 
+HOLD SEG n=1 delta_mdeg=0 c=0 front=160 rear=160
+RX: 01 FD 02 6B 02 FD 02 6B 03 FD 02 6B 04 FD 02 6B 
+YAW t=50378 ms=200 run=1 v=7 age=41 y=34749 d=0 z=0 n=504 b=0 e=0
+RX: 01 3A 81 6B 
+HOLD SAMPLE ms=311 id=1 flags=129 sign=1 error_counts=122
+RX: 01 37 01 00 00 00 7A 6B 
+HOLD DETAIL ms=336 id=1 op=53 sign=1 value=6
+RX: 01 35 01 00 06 6B 
+HOLD DETAIL ms=361 id=1 op=51 sign=1 value=393096
+RX: 01 33 01 00 05 FF 88 6B 
+HOLD DETAIL ms=386 id=1 op=52 sign=1 value=391129
+RX: 01 34 01 00 05 F7 D9 6B 
+RX: 02 3A 81 6B 
+YAW t=50578 ms=400 run=1 v=7 age=47 y=34782 d=33 z=244 n=506 b=0 e=0
+HOLD SAMPLE ms=436 id=2 flags=129 sign=0 error_counts=133
+RX: 02 37 00 00 00 00 85 6B 
+HOLD DETAIL ms=461 id=2 op=53 sign=0 value=4
+RX: 02 35 00 00 04 6B 
+HOLD DETAIL ms=486 id=2 op=51 sign=0 value=279702
+RX: 02 33 00 00 04 44 96 6B 
+HOLD DETAIL ms=511 id=2 op=52 sign=0 value=278512
+RX: 02 34 00 00 04 3F F0 6B 
+RX: 03 3A 81 6B 
+TX: hold_keep
+HOLD SAMPLE ms=561 id=3 flags=129 sign=0 error_counts=76
+RX: 03 37 00 00 00 00 4C 6B 
+HOLD DETAIL ms=586 id=3 op=53 sign=0 value=0
+RX: 03 35 00 00 00 6B 
+HOLD DETAIL ms=611 id=3 op=51 sign=0 value=385035
+RX: 03 33 00 00 05 E0 0B 6B 
+YAW t=50779 ms=601 run=1 v=7 age=48 y=34760 d=11 z=1037 n=508 b=0 e=0
+HOLD DETAIL ms=636 id=3 op=52 sign=0 value=384618
+RX: 03 34 00 00 05 DE 6A 6B 
+RX: 04 3A 81 6B 
+HOLD SAMPLE ms=686 id=4 flags=129 sign=1 error_counts=112
+RX: 04 37 01 00 00 00 70 6B 
+HOLD DETAIL ms=711 id=4 op=53 sign=0 value=0
+RX: 04 35 00 00 00 6B 
+HOLD DETAIL ms=736 id=4 op=51 sign=1 value=275218
+RX: 04 33 01 00 04 33 12 6B 
+HOLD DETAIL ms=761 id=4 op=52 sign=1 value=275218
+RX: 04 34 01 00 04 33 12 6B 
+RX: 01 3A 81 6B 
+HOLD SAMPLE ms=799 id=1 flags=129 sign=1 error_counts=93
+RX: 01 37 01 00 00 00 5D 6B 
+YAW t=50979 ms=801 run=1 v=7 age=44 y=34733 d=-16 z=366 n=510 b=0 e=0
+HOLD DETAIL ms=830 id=1 op=53 sign=0 value=0
+RX: 01 35 00 00 00 6B 
+HOLD DETAIL ms=855 id=1 op=51 sign=1 value=393096
+RX: 01 33 01 00 05 FF 88 6B 
+HOLD DETAIL ms=880 id=1 op=52 sign=1 value=393096
+RX: 01 34 01 
+00 05 FF 88 6B 
+RX: 02 3A 81 6B 
+HOLD SAMPLE ms=930 id=2 flags=129 sign=0 error_counts=63
+RX: 02 37 00 00 00 00 3F 6B 
+HOLD DETAIL ms=955 id=2 op=53 sign=0 value=0
+RX: 02 35 00 00 00 6B 
+HOLD DETAIL ms=980 id=2 op=51 sign=0 value=279702
+RX: 02 33 00 00 04 44 96 6B 
+HOLD DETAIL ms=1005 id=2 op=52 sign=0 value=279702
+RX: 02 34 00 00 04 44 96 6B 
+YAW t=51179 ms=1001 run=1 v=7 age=49 y=34733 d=-16 z=0 n=512 b=0 e=0
+RX: 03 3A 81 6B 
+TX: hold_keep
+HOLD SAMPLE ms=1055 id=3 flags=129 sign=0 error_counts=68
+RX: 0
+3 37 00 00 00 00 44 6B 
+HOLD DETAIL ms=1080 id=3 op=53 sign=0 value=0
+RX: 03 35 00 00 00 6B 
+HOLD DETAIL ms=1105 id=3 op=51 sign=0 value=385035
+RX: 03 33 00 00 05 E0 0B 6B 
+HOLD DETAIL ms=1130 id=3 op=52 sign=0 value=385035
+RX: 03 34 00 00 05 E0 0B 6B 
+RX: 04 3A 81 6B 
+HOLD SAMPLE ms=1180 id=4 flags=129 sign=1 error_counts=115
+RX: 04 37 01 00 00 00 73 6B 
+HOLD DETAIL ms=1205 id=4 op=53 sign=0 value=0
+RX: 04 35 00 00 00 6B 
+YAW t=51379 ms=1201 run=1 v=7 age=49 y=34733 d=-16 z=0 n=514 b=0 e=0
+HOLD DETAIL ms=1230 id=4 op=51 sign=1 value=275218
+RX: 04 33 01 00 04 33 12 6B 
+HOLD DETAIL ms=1255 id=4 op=52 sign=1 value=275218
+RX: 04 34 01 00 04 33 12 6B 
+RX: 01 3A 81 6B 
+HOLD SAMPLE ms=1293 id=1 flags=129 sign=1 error_counts=89
+RX: 01 37 01 00 00 00 59 6B 
+HOLD DETAIL ms=1318 id=1 op=53 sign=0 value=0
+RX: 01 35 00 00 00 6B 
+HOLD DETAIL ms=1343 id=1 op=51 sign=1 value=393096
+RX: 01 33 01 00 05 FF 88 6B 
+HOLD DETAIL ms=1368 id=1 op=52 sign=1 value=393096
+RX: 01 34 01 00 05 FF 88 6B 
+RX: 02 3A 81 6B 
+YAW t=51579 ms=1401 run=1 v=7 age=43 y=34733 d=-16 z=0 n=516 b=0 e=0
+HOLD SAMPLE ms=1424 id=2 flags=129 sign=0 error_counts=59
+RX: 02 37 00 00 00 00 3B 6B 
+HOLD DETAIL ms=1443 id=2 op=53 sign=0 value=0
+RX: 02 35 00 00 00 6B 
+HOLD DETAIL ms=1468 id=2 op=51 sign=0 value=279702
+RX: 02 33 00 00 04 44 96 6B 
+HOLD DETAIL ms=1493 id=2 op=52 sign=0 value=279702
+RX: 02 34 00 00 04 44 96 6B 
+TX: hold_keep
+RX: 03 3A 81 6B 
+HOLD SAMPLE ms=1543 id=3 flags=129 sign=0 error_counts=68
+RX: 03 37 00 00 00 00 44 6B 
+HOLD DETAIL ms=1568 id=3 op=53 sign=0 value=0
+RX: 03 35 00 00 00 6B 
+HOLD DETAIL ms=1593 id=3 op=51 sign=0 value=385035
+RX: 03 33 00 00 05 E0 0B 6B 
+YAW t=51779 ms=1601 run=1 v=7 age=44 y=34733 d=-16 z=0 n=518 b=0 e=0
+HOLD DETAIL ms=1624 id=3 op=52 sign=0 value=385035
+RX: 03 34 00 00 05 E0 0B 6B 
+RX: 04 3A 81 6B 
+HOLD SAMPLE ms=1668 id=4 flags=129 sign=1 error_counts=111
+RX: 04 37 01 00 00 00 6F 6B 
+HOLD DETAIL ms=1693 id=4 op=53 sign=0 value=0
+RX: 04 35 00 00 00 6B 
+HOLD DETAIL ms=1718 id=4 op=51 sign=1 value=275218
+RX: 04 33 01 00 04 33 12 6B 
+HOLD DETAIL ms=1743 id=4 op=52 sign=1 value=275218
+RX: 04 34 01 00 04 33 12 6B 
+RX: 01 3A 81 6B 
+HOLD SAMPLE ms=1781 id=1 flags=129 sign=1 error_counts=89
+RX: 01 37 01 00 00 00 59 6B 
+HOLD DETAIL ms=1806 id=1 op=53 sign=0 value=0
+RX: 01 35 00 00 00 6B 
+YAW t=51979 ms=1801 run=1 v=7 age=50 y=34733 d=-16 z=0 n=520 b=0 e=0
+HOLD DETAIL ms=1831 id=1 op=51 sign=1 value=393096
+RX: 01 33 01 00 05 FF 88 6B 
+HOLD DETAIL ms=1856 id=1 op=52 sign=1 value=393096
+RX: 01 34 01 00 05 FF 88 6B 
+RX: 02 3A 81 6B 
+HOLD SAMPLE ms=1906 id=2 flags=129 sign=0 error_counts=59
+RX: 02 37 00 00 00 00 3B 6B 
+HOLD DETAIL ms=1931 id=2 op=53 sign=0 value=0
+RX: 02 35 00 00 00 6B 
+HOLD DETAIL ms=1956 id=2 op=51 sign=0 value=279702
+RX: 02 33 00 00 04 44 96 6B 
+HOLD DETAIL ms=1981 id=2 op=52 sign=0 value=279702
+RX: 02 34 00 00 04 44 96 6B 
+TX: hold_keep
+RX: 03 3A 81 6B 
+YAW t=52179 ms=2001 run=1 v=7 age=50 y=34733 d=-16 z=0 n=522 b=0 e=0
+HOLD SAMPLE ms=2031 id=3 flags=129 sign=0 error_counts=68
+RX: 03 37 00 00 00 00 44 6B 
+HOLD DETAIL ms=2056 id=3 op=53 sign=0 value=0
+RX: 03 35 00 00 00 6B 
+HOLD DETAIL ms=2081 id=3 op=51 sign=0 value=385035
+RX: 03 33 00 00 05 E0 0B 6B 
+HOLD DETAIL ms=2106 id=3 op=52 sign=0 value=385035
+RX: 03 34 00 00 05 E0 0B 6B 
+RX: 04 3A 81 6B 
+HOLD SAMPLE ms=2156 id=4 flags=129 sign=1 error_counts=111
+RX: 
+04 37 01 00 00 00 6F 6B 
+HOLD DETAIL ms=2181 id=4 op=53 sign=0 value=0
+RX: 04 35 00 00 00 6B 
+HOLD DETAIL ms=2206 id=4 op=51 sign=1 value=275218
+RX: 04 33 01 00 04 33 12 6B 
+YAW t=52379 ms=2201 run=1 v=7 age=50 y=34733 d=-16 z=0 n=524 b=0 e=0
+HOLD DETAIL ms=2231 id=4 op=52 sign=1 value=275218
+RX: 04 34 01 00 04 33 12 6B 
+RX: 01 3A 81 6B 
+HOLD SAMPLE ms=2269 id=1 flags=129 sign=1 error_counts=89
+RX: 01 37 01 00 00 00 59 6B 
+HOLD DETAIL ms=2294 id=1 op=53 sign=0 value=0
+RX: 01 35 00 00 00 6B 
+HOLD DETAIL ms=2319 id=1 op=51 sign=1 value=393096
+RX: 01 33 01 00 05 FF 88 6B 
+HOLD DETAIL ms=2344 id=1 op=52 sign=1 value=393096
+RX: 01 34 01 00 05 FF 88 6B 
+RX: 02 3A 81 6B 
+HOLD SAMPLE ms=2394 id=2 flags=129 sign=0 error_counts=59
+RX: 02 37 00 00 00 00 3B 6B 
+YAW t=52580 ms=2402 run=1 v=7 age=50 y=34733 d=-16 z=0 n=526 b=0 e=0
+HOLD DETAIL ms=2425 id=2 op=53 sign=0 value=0
+RX: 02 35 00 00 00 6B 
+HOLD DETAIL ms=2444 id=2 op=51 sign=0 value=279702
+RX: 02 33 00 00 04 44 96 6B 
+TX: hold_keep
+HOLD DETAIL ms=2469 id=2 op=52 sign=0 value=279702
+RX: 02 34 00 00 04 44 96 6B 
+RX: 03 3A 81 6B 
+HOLD SAMPLE ms=2519 id=3 flags=129 sign=0 error_counts=68
+RX: 03 37 00 00 00 00 44 6B 
+HOLD DETAIL ms=2544 id=3 op=53 sign=0 value=0
+RX: 03 35 00 00 00 6B 
+HOLD DETAIL ms=2569 id=3 op=51 sign=0 value=385035
+RX: 03 33 00 00 05 E0 0B 6B 
+HOLD DETAIL ms=2594 id=3 op=52 sign=0 value=385035
+RX: 03 34 00 00 05 E0 0B 6B 
+YAW t=52780 ms=2602 run=1 v=7 age=50 y=34733 d=-16 z=0 n=528 b=0 e=0
+RX: 04 3A 81 6B 
+HOLD SAMPLE ms=2644 id=4 flags=129 sign=1 error_counts=111
+RX: 04 37 01 00 00 00 6F 6B 
+HOLD STOP: segment deadline; stop/disable sent. Observe actual vehicle.
+YAW t=52867 ms=2689 run=0 v=7 age=137 y=34733 d=-16 z=0 n=528 b=0 e=0
+RX: 01 FE 02 6B 01 F3 02 6B 02 FE 02 6B 02 F3 02 6B 
+RX: 03 FE 02 6B 03 F3 02 6B 04 FE 02 6B 04 F3 02 6B 
+TX: hold_status
+HOLD active=0 armed=0 completed=0 total=160 delta_mdeg=-11 correction=0; segmented P=8 pulses/deg cap=16/160 RPM=5
+TX: imu
+IMU USART3 PD8/PD9 RX_ONLY | baud=115200 | bytes=23848 | frames=2168 | bad_checksum=0 | uart_errors=0
+IMU angle: valid=1 | samples=542 | age_ms=47 | roll_mdeg=285 | pitch_mdeg=823 | yaw_mdeg=34744
+IMU gyro: valid=1 | samples=542 | age_ms=48 | z_mdps=0
+TX: stop
+STOP/DISABLE sent.
+RX: 01 FE E2 6B 01 F3 02 6B 02 FE E2 6B 02 F3 02 6B 
+RX: 03 FE E2 6B 03 F3 02 6B 04 FE E2 6B 04 F3 02 6B 
+Serial closed.

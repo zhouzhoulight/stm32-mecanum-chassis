@@ -41,15 +41,16 @@ for i in range(phnum):
             (0x20000000 <= vaddr and vaddr+memsz <= 0x20020000)), hex(vaddr)
     if filesz:
         assert 0x08000000 <= paddr and paddr+filesz <= 0x08080000, hex(paddr)
-for marker in [b'CHASSIS F407 TEST v2.0 | STM32F407VET6 | IDLE',
+for marker in [b'CHASSIS F407 TEST v2.1.5 | STM32F407VET6 | IDLE',
                b'Motor: UART4 PA0/PA1',
-               b'Firmware: v2.0 | Mecanum: X | Group: forward/back/left/right/cw/ccw',
+               b'Firmware: v2.1.5 | Mecanum: X | Group: forward/back/left/right/cw/ccw',
                b'IMU USART3 PD8/PD9 RX_ONLY | baud=',
-               b'YAW trace: moving only | interval_ms=200 | heading control=OFF']:
+               b'YAW trace: moving only | interval_ms=200 | heading control=OFF unless hold active',
+               b'HOLD START: left segmented;', b'HOLD STOP: ']:
     assert marker in binary, marker
 assert b'CHASSIS F103C8 TEST' not in binary
 run = project.RUN_FILE.read_text()
 for text in ['device: STMicroelectronics::STM32F407VETx', 'name: CMSIS-DAP@pyOCD',
              'protocol: swd', 'clock: 1000000', 'STM32F4xx_512.FLM']:
     assert text in run, text
-print('PASS: F407 v2.0 hard-float ELF, 128 KiB SRAM/512 KiB Flash, load segments, startup/USART1/UART4/USART3 vectors, CMSIS-DAP configuration.')
+print('PASS: F407 v2.1.5 hard-float ELF, 128 KiB SRAM/512 KiB Flash, load segments, startup/USART1/UART4/USART3 vectors, CMSIS-DAP configuration.')
