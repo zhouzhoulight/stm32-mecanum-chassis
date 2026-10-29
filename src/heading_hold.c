@@ -353,12 +353,12 @@ void hold_motor_rx(uint8_t byte, uint32_t now)
         return;
     }
     if (used == 1 && byte != 0xF3 && byte != 0xFD && byte != 0x3A && byte != 0x37 &&
-        byte != 0x35 && byte != 0x33 && byte != 0x34 && byte != 0x00) {
+        byte != 0x35 && byte != 0x33 && byte != 0x34 && byte != 0x36 && byte != 0x00) {
         used = 0; if (byte >= 1 && byte <= 4) packet[used++] = byte; return;
     }
     packet[used++] = byte;
     uint8_t expected = packet[1] == 0x35 ? 6 :
-        (packet[1] == 0x37 || packet[1] == 0x33 || packet[1] == 0x34) ? 8 : 4;
+        (packet[1] == 0x37 || packet[1] == 0x33 || packet[1] == 0x34 || packet[1] == 0x36) ? 8 : 4;
     if (used < expected) return;
     used = 0;
     if (packet[expected-1] != 0x6B) return;
@@ -368,7 +368,7 @@ void hold_motor_rx(uint8_t byte, uint32_t now)
         if (value != 0x02) { stop("motor command rejected"); return; }
         ack_mask |= (uint8_t)(1U << id);
     } else if (phase == H_SETTLE && motion_diag && id == pending_id && op==pending_op &&
-               (op==0x37 || op==0x35 || op==0x33 || op==0x34)) {
+               (op==0x37 || op==0x35 || op==0x33 || op==0x34 || op==0x36)) {
         pending_id = 0;
         uint32_t magnitude=op==0x35 ? ((uint32_t)packet[3]<<8)|packet[4] :
             ((uint32_t)packet[3]<<24)|((uint32_t)packet[4]<<16)|((uint32_t)packet[5]<<8)|packet[6];
@@ -380,10 +380,10 @@ void hold_motor_rx(uint8_t byte, uint32_t now)
         platform_log(" sign=");number(value);
         platform_log(op==0x37 ? " error_counts=" : " value=");number((int32_t)magnitude);
         platform_log("\r\n");
-        /* Read final target, trajectory setpoint and RPM as well as error.
+        /* Read final target, trajectory setpoint, actual position and RPM as well as error.
          * They are observational only: the original arrived gate is unchanged. */
-        if(op!=0x34) {
-            detail_op=op==0x37 ? 0x35 : op==0x35 ? 0x33 : 0x34;
+        if(op!=0x36) {
+            detail_op=op==0x37 ? 0x35 : op==0x35 ? 0x33 : op==0x33 ? 0x34 : 0x36;
             query_error_next=true;error_query_id=id;
         }
     } else if ((phase == H_CHECK || phase == H_SETTLE) && op == 0x3A && pending_op == 0x3A && id == pending_id) {

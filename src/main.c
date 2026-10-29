@@ -4,6 +4,7 @@
 #include "wit_imu.h"
 #include "yaw_trace.h"
 #include "heading_hold.h"
+#include "imu_service.h"
 #include <string.h>
 
 static UART_HandleTypeDef motor_uart, console_uart, imu_uart;
@@ -152,6 +153,31 @@ static void uart_init(void)
     __HAL_UART_ENABLE_IT(&imu_uart, UART_IT_RXNE);
 }
 
+/* Only IMU service uses these callbacks; never routed to motor_uart. */
+bool platform_imu_tx_enable(bool enable)
+{
+    GPIO_InitTypeDef io = {0};
+    HAL_NVIC_DisableIRQ(USART3_IRQn);
+    __HAL_UART_DISABLE(&imu_uart);
+    imu_uart.Init.Mode = enable ? UART_MODE_TX_RX : UART_MODE_RX;
+    HAL_StatusTypeDef result = HAL_UART_Init(&imu_uart);
+    io.Pin = GPIO_PIN_8;
+    io.Mode = enable && result == HAL_OK ? GPIO_MODE_AF_PP : GPIO_MODE_INPUT;
+    io.Pull = GPIO_NOPULL;
+    io.Speed = GPIO_SPEED_FREQ_HIGH;
+    io.Alternate = GPIO_AF7_USART3;
+    HAL_GPIO_Init(GPIOD, &io);
+    __HAL_UART_ENABLE_IT(&imu_uart, UART_IT_RXNE);
+    HAL_NVIC_EnableIRQ(USART3_IRQn);
+    return result == HAL_OK;
+}
+
+bool platform_imu_send(const uint8_t *bytes, size_t len)
+{
+    return imu_service_tx_enabled() && len == 5U &&
+           HAL_UART_Transmit(&imu_uart, (uint8_t *)bytes, (uint16_t)len, 20) == HAL_OK;
+}
+
 static void log_number(uint32_t value, uint32_t base)
 {
     /* 只转换整数，不引入 printf、堆分配或浮点格式化。 */
@@ -177,7 +203,8 @@ static void report_imu(void)
 {
     const WitImu *d = imu_data();
     uint32_t now = HAL_GetTick();
-    platform_log("IMU USART3 PD8/PD9 RX_ONLY | baud="); log_number(imu_uart.Init.BaudRate, 10);
+    platform_log("IMU USART3 PD8/PD9 ");
+    platform_log(imu_service_tx_enabled() ? "TX_RX | baud=" : "RX_ONLY | baud="); log_number(imu_uart.Init.BaudRate, 10);
     platform_log(" | bytes="); log_number(d->bytes, 10);
     platform_log(" | frames="); log_number(d->frames, 10);
     platform_log(" | bad_checksum="); log_number(d->bad_checksum, 10);
@@ -191,8 +218,13 @@ static void report_imu(void)
     platform_log("\r\nIMU gyro: valid="); log_number(imu_gyro_fresh(now), 10);
     platform_log(" | samples="); log_number(d->gyro_samples, 10);
     platform_log(" | age_ms="); log_number(d->gyro_seen ? now - d->gyro_at : UINT32_MAX, 10);
-    platform_log(" | z_mdps="); log_signed(d->z_mdps);
-    platform_log("\r\n");
+    platform_log(" | x/y/z_mdps="); log_signed(d->x_mdps);
+    platform_log("/"); log_signed(d->y_mdps); platform_log("/"); log_signed(d->z_mdps);
+    platform_log("\r\nIMU auxiliary: acc_samples="); log_number(d->acc_samples, 10);
+    platform_log(" | mag_samples="); log_number(d->mag_samples, 10);
+    platform_log(" | angle_word4_hex="); log_number(d->angle_word4, 16);
+    platform_log(" (SDK maps to version; check sensor firmware)\r\n");
+    imu_service_report(now);
 }
 
 static bool handle_imu_command(const char *line)
@@ -201,6 +233,11 @@ static bool handle_imu_command(const char *line)
     /* 不消费arm、不补发运动；诊断之前撤销尚未使用的授权。 */
     if (!test_begin_diagnostic()) return true;
     if (!strcmp(line, "imu")) { report_imu(); return true; }
+    if (imu_service_command(line, HAL_GetTick())) return true;
+    if (imu_service_busy()) {
+        platform_log("IMU busy; baud changes unavailable until diagnostic/calibration ends.\r\n");
+        return true;
+    }
     static const struct { const char *command; uint32_t baud; } rates[] = {
         {"imu baud 4800", 4800}, {"imu baud 9600", 9600},
         {"imu baud 19200", 19200}, {"imu baud 38400", 38400},
@@ -218,6 +255,11 @@ static bool handle_imu_command(const char *line)
         discard = USART3->DR;
         (void)discard;
         imu_init();
+        imu_service_init();
+        GPIO_InitTypeDef off = {0};
+        off.Pin = GPIO_PIN_8; off.Mode = GPIO_MODE_INPUT; off.Pull = GPIO_NOPULL;
+        HAL_GPIO_Init(GPIOD, &off);
+        imu_uart.Init.Mode = UART_MODE_RX;
         imu_uart.Init.BaudRate = rates[i].baud;
         HAL_StatusTypeDef ok = HAL_UART_Init(&imu_uart);
         __HAL_UART_ENABLE_IT(&imu_uart, UART_IT_RXNE);
@@ -229,6 +271,7 @@ static bool handle_imu_command(const char *line)
         }
         return true;
     }
+    platform_log("IMU service: imu zero; imu drift; imu cancel; imu tx on/off; imu cal acc; imu cal stop; imu cal check; imu save; imu read mode/output/filter/version.\r\n");
     platform_log("IMU commands: imu; imu baud 4800/9600/19200/38400/57600/115200/230400/460800/921600.\r\n");
     return true;
 }
@@ -274,7 +317,8 @@ static void report_status(void)
     platform_log(" | pulses="); log_number(VERIFY_BACK_1M_PULSES, 10);
     platform_log(" | deadline_ms="); log_number(VERIFY_BACK_1M_TIMEOUT_MS, 10);
     platform_log("\r\n");
-    platform_log("IMU: USART3 PD8/PD9 | RX_ONLY | baud="); log_number(imu_uart.Init.BaudRate, 10);
+    platform_log("IMU: USART3 PD8/PD9 | ");
+    platform_log(imu_service_tx_enabled() ? "TX_RX | baud=" : "RX_ONLY | baud="); log_number(imu_uart.Init.BaudRate, 10);
     platform_log(hold_active() ? " | heading control=SEGMENTED_LEFT\r\n" : " | heading control=OFF\r\n");
     platform_log("YAW trace: moving only | interval_ms=200 | heading control=OFF unless hold active\r\n");
     hold_report();
@@ -286,6 +330,7 @@ int main(void)
     clock_init();
     uart_init();
     imu_init();
+    imu_service_init();
     yaw_trace_init(&yaw_trace);
     hold_init();
     /* 上电先发停止/失能，随后等待。这里没有自动行走程序。 */
@@ -328,9 +373,13 @@ int main(void)
             if (c == '\r' || c == '\n') {
                 if (!dropping && used) {
                     line[used] = '\0';
-                    if (hold_command(line, HAL_GetTick())) { /* isolated heading mode */ }
+                    if (imu_service_busy() && strcmp(line, "stop") && strcmp(line, "status") &&
+                        strcmp(line, "hold_status") && strcmp(line, "help") && strcmp(line, "imu") &&
+                        strncmp(line, "imu ", 4)) {
+                        platform_log("IMU diagnostic/calibration active; motor commands blocked.\r\n");
+                    } else if (hold_command(line, HAL_GetTick())) { /* isolated heading mode */ }
                     else if (!strcmp(line, "status")) report_status();
-                    else if (handle_imu_command(line)) { /* 只读诊断不进入运动解析。 */ }
+                    else if (handle_imu_command(line)) { /* IMU commands never enter the motor parser. */ }
                     else test_command(line, HAL_GetTick());
                 }
                 used = 0; dropping = false;
@@ -355,6 +404,7 @@ int main(void)
         }
         if (n > 4) { hex[n++] = '\r'; hex[n++] = '\n'; hex[n] = 0; platform_log(hex); }
         /* stop/错误/tick及电机收包先处理；日志不改运动参数或执行新动作。 */
+        imu_service_tick(HAL_GetTick());
         hold_tick(HAL_GetTick());
         char trace_line[YAW_TRACE_LINE_CAPACITY];
         if (yaw_trace_poll(&yaw_trace, HAL_GetTick(), test_is_moving() || hold_active(), imu_data(),

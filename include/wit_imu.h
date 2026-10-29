@@ -13,6 +13,11 @@ typedef struct {
     uint32_t angle_samples, gyro_samples, angle_at, gyro_at;
     int32_t roll_mdeg, pitch_mdeg, yaw_mdeg, z_mdps;
     bool angle_seen, gyro_seen;
+    /* Raw auxiliary data: no assumption about configured accelerometer range. */
+    int32_t x_mdps, y_mdps;
+    int16_t acc_raw[3], mag_raw[3];
+    uint16_t angle_word4, reg_words[4];
+    uint32_t acc_samples, mag_samples, reg_samples, reg_at;
 } WitImu;
 
 void imu_init(void);
