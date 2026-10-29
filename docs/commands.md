@@ -32,3 +32,7 @@
 | `hold_keep` | 实验期间主机每500ms以内发一次心跳，超过1500ms停止 |
 
 手工控制台不自动发送心跳；不要手工启动长hold实验后只等待。离线测试通过不代表本车纠偏成功。当前到位门槛仍会使小段衔接中止，未提供自动重试脚本或默认长行程启动入口。
+
+## WT901新增校准诊断
+
+本地增量 `v2.1.6-imu2`：`imu zero`、`imu drift`、`imu tx on/off`、`imu read mode/output/filter/version`、`imu cal acc`、`imu cal stop`、`imu cal check`、`imu save`、`imu cancel`。详见 [WT901接线与操作](wt901-calibration.md)。默认TX关闭，不自动校准或保存；运动参数沿用v2.1.5。

@@ -145,7 +145,8 @@ int main(void)
     unsigned n=moves;
     hold_command("left_hold_16000",now);assert(!hold_active() && moves==n && stops==4 && disables==4);
     reset(0);start("left_hold_16000");hold_command("stop",now);assert(!hold_active() && moves==0);
-    for(unsigned i=0;i<100;++i)step(true,true);assert(moves==0);
+    for(unsigned i=0;i<100;++i) { step(true,true); }
+    assert(moves==0);
 
     reset(0);start("left_hold_16000");until_moves(4);data.yaw_mdeg=1000;
     until_moves(8);assert(last_pulses[4]==152 && last_pulses[3]==168);

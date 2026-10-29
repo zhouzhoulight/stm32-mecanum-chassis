@@ -16,14 +16,15 @@ def main():
     out = ROOT/'build/host-tests'
     out.mkdir(parents=True, exist_ok=True)
     pairs = [('motor', 'motor_test'), ('imu', 'wit_imu'), ('yaw_trace', 'yaw_trace'),
-             ('heading', 'heading_hold')]
+             ('heading', 'heading_hold'), ('imu_service', 'imu_service')]
     for test, module in pairs:
         if not (ROOT/f'tests/test_{test}.c').exists():
             continue
         exe = out/f'test_{test}'
         subprocess.run([os.environ.get('CC', 'cc'), '-std=c11', '-Wall', '-Wextra', '-Werror',
                         '-fsanitize=address,undefined', '-Iinclude', f'tests/test_{test}.c',
-                        f'src/{module}.c', '-o', str(exe)], cwd=ROOT, check=True)
+                        f'src/{module}.c', *(['src/wit_imu.c'] if test == 'imu_service' else []),
+                        '-o', str(exe)], cwd=ROOT, check=True)
         subprocess.run([str(exe)], cwd=ROOT, check=True)
     for name in ['test_tools.py', 'test_driver_parameters.py']:
         if (ROOT/'tests'/name).exists():

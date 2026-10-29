@@ -142,7 +142,9 @@ def console(port):
     config[4] = config[5] = termios.B115200
     config[6][termios.VMIN] = 0
     config[6][termios.VTIME] = 0
-    allowed = {'help', 'status', 'imu', 'stop', 'jog 0', 'jog 1', 'arm all',
+    allowed = {'help', 'status', 'imu', 'imu zero', 'imu drift', 'imu cancel',
+               'imu tx on', 'imu tx off', 'imu cal acc', 'imu cal stop', 'imu cal check', 'imu save',
+               'imu read mode', 'imu read output', 'imu read filter', 'imu read version', 'stop', 'jog 0', 'jog 1', 'arm all',
                'forward', 'back', 'left', 'right', 'cw', 'ccw',
                'arm hold', 'left_diag_160', 'left_hold_1600', 'left_hold_16000', 'hold_keep', 'hold_status',
                'forward_long', 'back_long', 'left_long', 'right_long', 'cw_long', 'ccw_long',
