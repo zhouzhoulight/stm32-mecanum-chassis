@@ -4,7 +4,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define TEST_FIRMWARE_VERSION "v2.1.6-imu2"
+#define TEST_FIRMWARE_VERSION "v2.1.7-diag1"
 
 /* 这些常量是第一次架空测试的限制，不是整车运动参数。 */
 #define TEST_RPM 5U

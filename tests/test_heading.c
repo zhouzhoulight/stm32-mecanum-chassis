@@ -61,10 +61,11 @@ bool platform_motor_send(const uint8_t *p, size_t len)
         assert((p[1]==0x21 && len==3 && p[2]==0x6B) ||
                (p[1]==0x42 && len==4 && p[2]==0x6C && p[3]==0x6B));
         memcpy(last_read,p,len);last_read_len=len;
-    } else if(p[1]==0x35 || p[1]==0x33 || p[1]==0x34) {
+    } else if(p[1]==0x35 || p[1]==0x33 || p[1]==0x34 || p[1]==0x36) {
         assert(len==3 && p[2]==0x6B);
         if(live_diag_reply) {
             uint8_t q[]={id,p[1],0,0,0,0,160,0x6B};
+            if(p[1]==0x36)q[6]=(uint8_t)(id>=3 ? 80 : 160);
             size_t count=sizeof q;
             if(p[1]==0x35){count=6;q[5]=0x6B;}
             assert(head+count<sizeof queue);memcpy(queue+head,q,count);head+=count;
@@ -203,6 +204,8 @@ int main(void)
     assert(strstr(logs,"id=4 op=53 sign=0 value=0"));
     assert(strstr(logs,"id=4 op=51 sign=0 value=160"));
     assert(strstr(logs,"id=4 op=52 sign=0 value=160"));
+    assert(strstr(logs,"id=4 op=54 sign=0 value=80"));
+    assert(strstr(logs,"id=1 op=54 sign=0 value=160"));
     for(unsigned id=1;id<=4;++id)assert(pulse_sum[id]==160);
     reset(0);live_diag_reply=true;arrived=false;start("left_diag_160");
     for(unsigned i=0;i<100 && !strstr(logs,"HOLD SAMPLE");++i)step(true,true);
