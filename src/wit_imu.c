@@ -47,20 +47,33 @@ void imu_feed(uint8_t byte, uint32_t now)
 
     uint8_t sum = 0;
     for (unsigned i = 0; i < 10; ++i) sum = (uint8_t)(sum + frame[i]);
-    if (sum == frame[10] && frame[1] >= 0x50U && frame[1] <= 0x59U) {
+    if (sum == frame[10] && frame[1] >= 0x50U && (frame[1] <= 0x59U || frame[1] == 0x5FU)) {
         ++data.frames;
         if (frame[1] == 0x53U) {
             data.roll_mdeg = scaled(frame + 2, 180000);
             data.pitch_mdeg = scaled(frame + 4, 180000);
             data.yaw_mdeg = scaled(frame + 6, 180000);
+            data.angle_word4 = (uint16_t)(frame[8] | (uint16_t)frame[9] << 8);
             data.angle_at = now;
             data.angle_seen = true;
             ++data.angle_samples;
         } else if (frame[1] == 0x52U) {
+            data.x_mdps = scaled(frame + 2, 2000000);
+            data.y_mdps = scaled(frame + 4, 2000000);
             data.z_mdps = scaled(frame + 6, 2000000);
             data.gyro_at = now;
             data.gyro_seen = true;
             ++data.gyro_samples;
+        } else if (frame[1] == 0x51U || frame[1] == 0x54U) {
+            int16_t *axes = frame[1] == 0x51U ? data.acc_raw : data.mag_raw;
+            for (unsigned i = 0; i < 3; ++i) axes[i] = (int16_t)scaled(frame + 2 + 2*i, 32768);
+            if (frame[1] == 0x51U) ++data.acc_samples;
+            else ++data.mag_samples;
+        } else if (frame[1] == 0x5FU) {
+            for (unsigned i = 0; i < 4; ++i)
+                data.reg_words[i] = (uint16_t)(frame[2+2*i] | (uint16_t)frame[3+2*i] << 8);
+            ++data.reg_samples;
+            data.reg_at = now;
         }
         used = 0;
     } else {

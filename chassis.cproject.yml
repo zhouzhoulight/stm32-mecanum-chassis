@@ -6,48 +6,69 @@ project:
     - HSE_VALUE: 25000000U
   add-path:
     - include
+    - src/nav
     - vendor/Drivers/STM32F4xx_HAL_Driver/Inc
     - vendor/Drivers/CMSIS/Include
     - vendor/Drivers/CMSIS/Device/ST/STM32F4xx/Include
   output:
     type: [elf, hex, bin]
   linker:
-    - script: STM32F407VE.ld
+    - script: STM32F407VE_nav.ld
   misc:
     - for-compiler: GCC
       C:
+        - -mfpu=fpv4-sp-d16
+        - -mfloat-abi=hard
+        - -O2
         - -ffunction-sections
         - -fdata-sections
         - -Wall
         - -Wextra
+        - -Wno-unused-parameter
       Link:
+        - -mfpu=fpv4-sp-d16
+        - -mfloat-abi=hard
         - -nostartfiles
         - --specs=nano.specs
         - --specs=nosys.specs
+        - -lm
         - -Wl,--gc-sections
-        - -Wl,--print-memory-usage
   groups:
-    - group: Application
+    - group: Current nav1i firmware
       files:
-        - file: src/main.c
-        - file: src/motor_test.c
-        - file: src/wit_imu.c
-        - file: src/heading_hold.c
-        - file: include/heading_hold.h
-        - file: src/yaw_trace.c
-        - file: include/wit_imu.h
-        - file: include/yaw_trace.h
-        - file: include/motor_test.h
-        - file: include/chassis_config.h
-    - group: Startup
-      files:
-        - file: src/startup_stm32f407xx.s
+        - file: src/nav_main.c
+        - file: src/nav_startup.s
         - file: src/system_stm32f4xx.c
+        - file: src/wit_imu.c
+        - file: src/imu_service.c
+        - file: src/nav/nav_app.c
+        - file: src/nav/nav_bus.c
+        - file: src/nav/nav_control.c
+        - file: src/nav/nav_increment.c
+        - file: src/nav/nav_odom.c
+        - file: src/nav/nav_route.c
+        - file: src/nav/nav_syscalls.c
+        - file: src/nav/generated/eye.c
+        - file: src/nav/generated/minOrMax.c
+        - file: src/nav/generated/nav_fusion_step.c
+        - file: src/nav/generated/nav_fusion_step_data.c
+        - file: src/nav/generated/nav_fusion_step_initialize.c
+        - file: src/nav/generated/nav_fusion_step_terminate.c
+        - file: src/nav/generated/rt_nonfinite.c
+        - file: src/nav/generated/rtGetInf.c
+        - file: src/nav/generated/rtGetNaN.c
+        - file: src/nav/qp/minOrMax.c
+        - file: src/nav/qp/mpcActiveSetSolver.c
+        - file: src/nav/qp/norm.c
+        - file: src/nav/qp/official_qp.c
+        - file: src/nav/qp/official_qp_data.c
+        - file: src/nav/qp/official_qp_initialize.c
+        - file: src/nav/qp/official_qp_terminate.c
+        - file: src/nav/qp/qpkwik.c
+        - file: src/nav/qp/xgemv.c
+        - file: src/nav/qp/xgerc.c
+        - file: src/nav/qp/xnrm2.c
     - group: ST HAL
-      misc:
-        - for-compiler: GCC
-          C:
-            - -Wno-unused-parameter
       files:
         - file: vendor/Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal.c
         - file: vendor/Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_cortex.c

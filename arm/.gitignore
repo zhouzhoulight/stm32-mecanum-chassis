@@ -1,0 +1,6 @@
+project/MDK-ARM/F407Output/
+*.log
+symbols.txt
+verification.json
+*.exe
+__pycache__/

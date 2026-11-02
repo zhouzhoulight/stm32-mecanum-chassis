@@ -1,0 +1,10 @@
+{
+  "version": "GC1_ARM_F407VE_USART1_20261028_R9D",
+  "bytes": 42472,
+  "sha256": "0a6a6fe40aee3fdb7898de4670bd433072f30bfeea785795ebc866643a079925",
+  "hse_mhz": 25,
+  "sysclk_mhz": 168,
+  "toolchain": "Keil ARMCC5.06 update6 build750",
+  "validation": "rebuild0 errors0 warnings; NOT flashed this session",
+  "flash_config_sector": 7
+}

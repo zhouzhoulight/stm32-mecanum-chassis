@@ -1,9 +1,0 @@
-{
-    "targetSet": {
-        "chassis": {
-            "activeTargetType": "Board"
-        }
-    },
-    "activeSolution": "../chassis.csolution.yml",
-    "activeTarget": "Board"
-}

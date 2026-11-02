@@ -1,0 +1,13 @@
+#include "board_port.h"
+#include "arm_task.h"
+void SysTick_Handler(void){HAL_IncTick();}
+void USART1_IRQHandler(void){ArmTask_DebugIRQ();}
+void UART4_IRQHandler(void){ArmTask_MotorIRQ();}
+void NMI_Handler(void){Error_Handler();}
+void HardFault_Handler(void){Error_Handler();}
+void MemManage_Handler(void){Error_Handler();}
+void BusFault_Handler(void){Error_Handler();}
+void UsageFault_Handler(void){Error_Handler();}
+void SVC_Handler(void){}
+void DebugMon_Handler(void){}
+void PendSV_Handler(void){}
