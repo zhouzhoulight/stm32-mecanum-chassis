@@ -1,20 +1,35 @@
-# STM32 F407 底盘与机械臂
+# STM32 麦轮底盘、机械臂与 LD19 雷达固件
 
-当前底盘 **nav1i / v2.5.0-nav1i-20261102**，机械臂 **R9D**。两套独立F407VET6固件，外部晶振25MHz，系统168MHz，尚未合并。
+更新日期：2026-11-12。主控与独立雷达板均为 STM32F407VET6，25MHz 外部晶振、168MHz 系统时钟。
 
-先读[详细交接](docs/HANDOFF_NAV1I_20261102.md)、[底盘命令](docs/COMMANDS_NAV1I.md)、[机械臂命令](arm/docs/serial_protocol.md)。
+| 内容 | 当前版本 | 验证状态 |
+| --- | --- | --- |
+| 主控：底盘＋机械臂＋板上避障规划 | `v2.7.31-clockretry-20261111` | 重新编译与离线候选一致；**未烧录、未实车复测** |
+| 雷达处理板 | `LD19_BENCH_F407VE_0.3.3`，协议2 | 重新编译与此前烧录镜像一致；本次未操作硬件 |
+| 机械臂 | 集成 R9E 状态机 | 已编入主控；`arm/` 保存共享依赖及独立工程源码 |
 
-本次最新底盘加入中央通道连续路线、作业站停稳、150/200RPM预算、1rad/s同步转向、位移守恒里程计和控制用短时响应预测。只完成离线检查/编译，**尚未实车验证**。生产C异步链路检查整圈约65～71秒；不能当作实车60秒或定位精度保证。
+先阅读[当前交接说明](docs/HANDOFF_F407_LIDAR_20261112.md)、[接线与命令](docs/WIRING_AND_COMMANDS.md)、[双板协议](docs/LIDAR_LINK.md)。
 
-## 构建
+此次仅发布最新 STM32 源码、HAL/CMSIS、构建入口、当前 BIN/HEX 及详细交接文档；不包含仿真、测试数据、实测日志、调试符号、上位机运行数据和本地中间提交。`src/nav/generated/`、`src/nav/qp/` 是实际部署的算法 C，须保留。
+
+## 编译
+
+Python 3.9+、GNU Arm Embedded GCC（本次为 STM32 GNU GCC 13.3.1）；雷达板还需要 CMake 3.20+ 和 Ninja。先将工具加入 PATH，从仓库根目录执行：
 
 ```powershell
 python scripts/build_nav.py
-powershell -ExecutionPolicy Bypass -File arm/build.ps1
+python lidar/tools/build.py
 ```
 
-底盘用GNU Arm GCC硬浮点，必要时设置`CHASSIS_GCC`；产物`build/nav1i/`。机械臂用Keil ARMCC5，构建路径可在脚本中调整。当前可下载镜像分别在`firmware/current/`、`arm/firmware/current/`，均下载0x08000000。下载前核对目标并备份，保留sector7标定；底盘大于64KiB，旧只擦sector0～3脚本不适用。构建不会烧录。
+主控也可设置 `CHASSIS_GCC`；雷达可设置 `ARM_GCC`、`CMAKE`、`NINJA`，分别指向工具可执行文件。脚本只编译，不连接串口或下载器，不发运动指令。
 
-本次发布快照仅含最新STM32源码、HAL/CMSIS、工程/构建入口、当前固件、使用说明与许可证；不含仿真工程、仿真/测试/实车数据、测试夹具和本地中间提交。生成的`src/nav/generated`和`src/nav/qp`是可部署STM32算法C源码，不是MATLAB仿真工程。
+- 主控输出 `build/nav1k/chassis-nav1k.bin`、`.hex`、`build.json`。
+- 雷达输出 `lidar/build/Release/LD19Bench.bin`、`.hex`、`build.json`。
+- 当前发布镜像：`firmware/current/`、`lidar/firmware/current/`。
+- `chassis.csolution.yml` 是可选 CMSIS-Toolbox 入口，已补齐雷达源文件。本次只验证上述 Python/GCC 构建，未声称验证所有 IDE。
 
-公开快照隐私处理：仅发布BIN/HEX，不发布带本机调试路径的ELF/AXF；需要调试符号请从源码本机构建。工具安装位置通过PATH或`CHASSIS_GCC`、`KEIL_UV4`、`KEIL_FROMELF`环境变量配置，不保留贡献者的本机绝对路径。
+BIN 下载基址均为 `0x08000000`；HEX 自带地址。主控保留 sector7（`0x08060000..0x0807FFFF`）的机械臂标定，整片擦除会丢失；Flash 高度记录不等于驱动器跨断电物理绝对定位。
+
+本版仍为诊断候选。同步重试改善已在离线验证中出现，自身边缘回波、原料盘边缘误检及严重打滑仍有反例，不能承诺全图毫米级定位或已完成无障碍整圈实测。
+
+第三方许可见 [THIRD_PARTY.md](THIRD_PARTY.md) 及各目录原始许可证。

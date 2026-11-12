@@ -7,6 +7,7 @@ project:
   add-path:
     - include
     - src/nav
+    - arm/project/Core/Inc
     - vendor/Drivers/STM32F4xx_HAL_Driver/Inc
     - vendor/Drivers/CMSIS/Include
     - vendor/Drivers/CMSIS/Device/ST/STM32F4xx/Include
@@ -34,7 +35,7 @@ project:
         - -lm
         - -Wl,--gc-sections
   groups:
-    - group: Current nav1i firmware
+    - group: Current nav1k firmware
       files:
         - file: src/nav_main.c
         - file: src/nav_startup.s
@@ -47,6 +48,13 @@ project:
         - file: src/nav/nav_increment.c
         - file: src/nav/nav_odom.c
         - file: src/nav/nav_route.c
+        - file: src/nav/nav_arm.c
+        - file: src/nav/nav_arm_hw.c
+        - file: src/nav/nav_map.c
+        - file: src/nav/nav_lidar.c
+        - file: src/nav/nav_lidar_map.c
+        - file: src/nav/nav_vision.c
+        - file: src/nav/nav_mission.c
         - file: src/nav/nav_syscalls.c
         - file: src/nav/generated/eye.c
         - file: src/nav/generated/minOrMax.c
@@ -68,8 +76,11 @@ project:
         - file: src/nav/qp/xgemv.c
         - file: src/nav/qp/xgerc.c
         - file: src/nav/qp/xnrm2.c
+        - file: src/nav/nav_slip.c
     - group: ST HAL
       files:
+        - file: vendor/Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_tim.c
+        - file: vendor/Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_tim_ex.c
         - file: vendor/Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal.c
         - file: vendor/Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_cortex.c
         - file: vendor/Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_dma.c

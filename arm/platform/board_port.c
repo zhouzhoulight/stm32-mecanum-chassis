@@ -74,13 +74,14 @@ void Board_Arm_Init(void)
     if(HAL_TIM_PWM_ConfigChannel(&htim3,&oc,TIM_CHANNEL_1)!=HAL_OK)Error_Handler();
     if(HAL_TIM_PWM_ConfigChannel(&htim3,&oc,TIM_CHANNEL_2)!=HAL_OK)Error_Handler();
     if(HAL_TIM_PWM_ConfigChannel(&htim3,&oc,TIM_CHANNEL_3)!=HAL_OK)Error_Handler();
+    if(HAL_TIM_PWM_ConfigChannel(&htim3,&oc,TIM_CHANNEL_4)!=HAL_OK)Error_Handler();
     __HAL_TIM_DISABLE(&htim3);TIM3->CCER=0;
     TIM3->CCR1=TIM3->CCR2=TIM3->CCR3=TIM3->CCR4=0;TIM3->EGR=TIM_EGR_UG;TIM3->SR=0;
     __HAL_RCC_GPIOC_CLK_ENABLE();
-    pin.Pin=GPIO_PIN_6|GPIO_PIN_7|GPIO_PIN_8;pin.Mode=GPIO_MODE_AF_PP;
+    pin.Pin=GPIO_PIN_6|GPIO_PIN_7|GPIO_PIN_8|GPIO_PIN_9;pin.Mode=GPIO_MODE_AF_PP;
     pin.Pull=GPIO_NOPULL;pin.Speed=GPIO_SPEED_FREQ_HIGH;pin.Alternate=GPIO_AF2_TIM3;
     HAL_GPIO_Init(GPIOC,&pin);
-    pin.Pin=GPIO_PIN_9;pin.Mode=GPIO_MODE_ANALOG;pin.Alternate=0;HAL_GPIO_Init(GPIOC,&pin);
+
     (void)huart1.Instance->SR;(void)huart1.Instance->DR;(void)huart4.Instance->SR;(void)huart4.Instance->DR;
     __HAL_UART_ENABLE_IT(&huart1,UART_IT_RXNE);__HAL_UART_ENABLE_IT(&huart4,UART_IT_RXNE);
 }

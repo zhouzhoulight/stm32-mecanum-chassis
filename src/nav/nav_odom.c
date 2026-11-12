@@ -1,7 +1,9 @@
+#include "nav/studio_profile.h"
 /* Common-time, interpolation-only drive-encoder + WT heading odometry.
  * Counts remain int64/Q10 until differenced, so long sessions retain resolution.
  * Neither estimator provides an absolute XY observation. */
 #include "nav/nav_odom.h"
+#include "nav/nav_lidar.h"
 #include "nav/nav_platform.h"
 #include "nav/nav_time.h"
 #include "nav/nav_increment.h"
@@ -52,7 +54,7 @@ static void seed_filter(void)
 void nav_odom_init(void)
 {
  memset(commands,0,sizeof commands);memset(&data,0,sizeof data);memset(hist,0,sizeof hist);yaw_seen=false;
- speed_seen=false;data.response_s=.16f;data.response_samples=0;
+ speed_seen=false;data.imu_delay_ms=STUDIO_IMU_DELAY;data.response_s=.16f;data.response_samples=0;
  yaw_unwrapped=yaw_origin=0;data.ppm_x=NAV_FORWARD_PPM;data.ppm_y=NAV_LATERAL_PPM;data.lever_m=.22f;seed_filter();
 }
 void nav_odom_yaw(int32_t mdeg,uint32_t at)
@@ -82,6 +84,7 @@ void nav_odom_wheel(uint8_t id,int32_t count,uint32_t at)
 void nav_odom_rebind(bool origin)
 {
  if(origin){
+  nav_lidar_reset();
   memset(&data.base,0,sizeof data.base);memset(&data.fused,0,sizeof data.fused);
   /* A previous rejected yaw jump must not bias a newly declared origin.
    * Establish heading from the NEXT fresh raw frame, not the rejected history. */
@@ -93,10 +96,19 @@ void nav_odom_rebind(bool origin)
  data.pair_count=data.max_R=0;data.rejected_mask=data.ambiguous_mask=0;
  memset(data.wheel_mps,0,sizeof data.wheel_mps);
 }
+bool nav_odom_restore_pose(float x,float y,float yaw)
+{
+ if(!yaw_seen||data.fault||data.quiet<3||!isfinite(x)||!isfinite(y)||!isfinite(yaw)||x<0||x>2.10f||y<0||y>2.10f||fabsf(yaw)>3.141593f)return false;
+ nav_lidar_reset(); /* explicit world-frame restore invalidates remembered geometry */
+ yaw_origin=yaw_unwrapped-(int64_t)llroundf(yaw/DEG);
+ data.base.x_m=data.fused.x_m=x;data.base.y_m=data.fused.y_m=y;
+ nav_odom_rebind(false);return true;
+}
 bool nav_odom_config(unsigned x,unsigned y,unsigned imu_ms,unsigned enc_ms,float lever)
 {
  if(data.fault)return false; /* Configuration is not a physical re-reference. */
  if(x<5000||x>30000||y<5000||y>30000||imu_ms>150||enc_ms>50||!isfinite(lever)||lever<.1f||lever>.5f)return false;
+ nav_lidar_reset(); /* calibration change requires new observation association */
  data.ppm_x=x;data.ppm_y=y;data.imu_delay_ms=imu_ms;data.encoder_delay_ms=enc_ms;data.lever_m=lever;nav_odom_rebind(false);return true;
 }
 static void se2(NavPose *p,float dx,float dy,float heading)
@@ -107,22 +119,54 @@ static void se2(NavPose *p,float dx,float dy,float heading)
  p->x_m+=c*x-s*y;p->y_m+=s*x+c*y;p->yaw_rad=heading;p->path_m+=hypotf(dx,dy);
  p->vx_mps=dx/.05f;p->vy_mps=dy/.05f;
 }
+/* v2.7.12: heading for a wheel-fast epoch. Prefer the aligned delayed sample;
+ * otherwise linearly extrapolate from the two newest aligned IMU samples so a
+ * 10 Hz source does not inject a staircase into dtheta (the fused robust solver
+ * reports such an angular residual as wheel inconsistency). Slope and horizon
+ * are clamped; beyond that hold the last sample. */
+static float yaw_for_epoch(uint32_t t)
+{
+ int64_t q;
+ if(interpolate(&hist[4],t,&q))return (q/1024.0f)*DEG;
+ unsigned n=hist[4].n;
+ if(n<2)return (hist[4].q[n-1]/1024.0f)*DEG;
+ uint32_t t1=hist[4].t[n-1],t0=hist[4].t[n-2];
+ int32_t ahead=(int32_t)(t-t1);
+ if(ahead<0)return (hist[4].q[0]/1024.0f)*DEG;         /* before first aligned sample */
+ uint32_t span=t1-t0;
+ if(!span||ahead>150)return (hist[4].q[n-1]/1024.0f)*DEG;
+ float slope=(float)(hist[4].q[n-1]-hist[4].q[n-2])/(float)span/1024.0f*DEG*1000.0f;
+ slope=fmaxf(-4.0f,fminf(4.0f,slope));
+ return (hist[4].q[n-1]/1024.0f)*DEG+slope*(float)ahead*.001f;
+}
 void nav_odom_tick(uint32_t now)
 {
  if(data.fault)return;
  for(unsigned k=0;k<5;k++)if(!hist[k].n)return;
- uint32_t latest=hist[4].t[hist[4].n-1];
- for(unsigned k=0;k<4;k++){uint32_t t=hist[k].t[hist[k].n-1];if((int32_t)(t-latest)<0)latest=t;}
+ /* v2.7.12: the 50 ms encoder epoch advances on the FOUR WHEEL histories only.
+  * The WT901 stream is 10 Hz; after the IMU delay shift its newest aligned
+  * sample can be ~55..155 ms older than the wheels, so including hist[4] in
+  * this minimum pinned pose.at that far back and forced long control
+  * extrapolation (field logs: pose_age 99..183 ms). The delayed yaw sample is
+  * still interpolated/extrapolated when it covers the epoch (yaw_for_epoch);
+  * angle/gyro freshness is independently enforced by nav_app feedback. */
+ uint32_t latest=hist[0].t[hist[0].n-1];
+ for(unsigned k=1;k<4;k++){uint32_t t=hist[k].t[hist[k].n-1];if((int32_t)(t-latest)<0)latest=t;}
  if(nav_age(now,latest)>500U){if(data.seeded)invalidate(NAV_FRAME_LOST);return;}
  if(!data.seeded){
-  for(unsigned k=0;k<5;k++)if(!interpolate(&hist[k],latest,&previous[k]))return;
+  for(unsigned k=0;k<4;k++)if(!interpolate(&hist[k],latest,&previous[k]))return;
+  /* No aligned 10 Hz yaw sample yet at this instant: use the newest delayed
+   * yaw (yaw_for_epoch holds that value when extrapolation is unavailable). */
+  previous[4]=(int64_t)llroundf(yaw_for_epoch(latest)/DEG*1024.0f);
   epoch=latest;data.seeded=1;data.base.yaw_rad=data.fused.yaw_rad=(previous[4]/1024.0f)*DEG;
   data.base.at=data.fused.at=epoch;data.base.valid=data.fused.valid=true;return;
  }
  unsigned updates=0;
  while((int32_t)(latest-epoch)>=(int32_t)NAV_ODOM_MS && updates++<4){
   uint32_t next=epoch+NAV_ODOM_MS;int64_t current[5];
-  for(unsigned k=0;k<5;k++)if(!interpolate(&hist[k],next,&current[k])){invalidate(NAV_HISTORY_GAP);return;}
+  for(unsigned k=0;k<4;k++)if(!interpolate(&hist[k],next,&current[k])){invalidate(NAV_HISTORY_GAP);return;}
+  /* 10 Hz yaw at wheel-grid epochs: interpolate or linearly extrapolate. */
+  current[4]=(int64_t)llroundf(yaw_for_epoch(next)/DEG*1024.0f);
   float ds[4],max_speed=0;
   for(unsigned k=0;k<4;k++){
    ds[k]=(current[k]-previous[k])/(1024.0f*20.48f*data.ppm_x);
@@ -150,6 +194,9 @@ void nav_odom_tick(uint32_t now)
   se2(&data.base,dx,dy,heading);
   if(max_speed<.003f && fabsf(omega)<.02f)data.quiet++;else data.quiet=0;
   float delta[2],diag[4];
+  data.null_residual_mps=(ds[0]+ds[1]-ds[2]-ds[3])/.05f;
+  data.angular_model=nav_increment_angular_model(ds,omega*.05f,.05f,data.lever_m);
+  if(data.angular_model)data.angular_model_samples++;
   nav_increment(ds,omega*.05f,.05f,(float)data.ppm_y/data.ppm_x,data.lever_m,
                 data.fused.vx_mps,data.fused.vy_mps,delta,diag);
   if(!isfinite(delta[0])||!isfinite(delta[1])){invalidate(NAV_NUMERIC_FAULT);return;}
@@ -184,11 +231,24 @@ static float heading_at(uint32_t at,float gyro)
  uint32_t aligned=last_yaw_at-data.imu_delay_ms;
  return (yaw_unwrapped-yaw_origin)*DEG+gyro*nav_age(at,aligned)*.001f;
 }
+#define NAV_GYRO_RATE_LIMIT 2.0f /* rad/s; IMU/vehicle plausibility bound */
+#define NAV_GYRO_HIGH_MS 300U    /* sustained-implausibility stop delay */
+bool nav_odom_gyro_valid(float gyro,uint32_t now)
+{
+ static uint32_t high_at;static bool high_active;
+ if(!isfinite(gyro))return false;
+ if(fabsf(gyro)<=NAV_GYRO_RATE_LIMIT){high_active=false;return true;}
+ /* A commanded fast turn can legitimately exceed the old fixed gate for a
+  * few control ticks. Only a SUSTAINED implausible rate invalidates the
+  * prediction horizon; the chassis E-stop path stays active. */
+ if(!high_active){high_active=true;high_at=now;}
+ return (uint32_t)(now-high_at)<=NAV_GYRO_HIGH_MS;
+}
 bool nav_odom_predict(bool fused,uint32_t now,float gyro,NavPose *out)
 {
  const NavPose *p=fused?&data.fused:&data.base;
  *out=*p;uint32_t age=nav_age(now,p->at);
- if(!p->valid||age>250||!isfinite(gyro)||fabsf(gyro)>2.0f)return false;
+ if(!p->valid||age>250||!nav_odom_gyro_valid(gyro,now))return false;
  /* Control shadow only. ACK history supplies INPUTS to a provisional
   * first-order actuator response, never fake encoder observations. */
  float vel[4];for(unsigned k=0;k<4;k++){
@@ -210,6 +270,14 @@ bool nav_odom_predict(bool fused,uint32_t now,float gyro,NavPose *out)
   out->x_m+=c*x-sn*y;out->y_m+=sn*x+c*y;out->yaw_rad=h;at+=ms;
  }
  out->vx_mps=(vel[0]+vel[1]+vel[2]+vel[3])/4;
- out->vy_mps=(-vel[0]+vel[1]+vel[2]-vel[3])*data.ppm_x/(4*data.ppm_y);out->yaw_rad=p->yaw_rad+gyro*age*.001f;out->at=now;
+ out->vy_mps=(-vel[0]+vel[1]+vel[2]-vel[3])*data.ppm_x/(4*data.ppm_y);
+ /* Retain the newest aligned angle anchor. Do not overwrite it with a
+  * constant-rate extrapolation from an older common encoder epoch. */
+ out->yaw_rad=heading_at(now,gyro);out->at=now;
  return isfinite(out->x_m)&&isfinite(out->y_m)&&isfinite(out->yaw_rad)&&isfinite(out->vx_mps)&&isfinite(out->vy_mps);
+}
+
+bool nav_odom_lidar_shift(float dx,float dy){
+ if(!data.fused.valid||data.fault||!isfinite(dx)||!isfinite(dy)||hypotf(dx,dy)>.0051f)return false;
+ data.fused.x_m+=dx;data.fused.y_m+=dy;return true;
 }

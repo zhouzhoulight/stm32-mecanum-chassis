@@ -6,7 +6,8 @@
  * References and firmware compatibility limits: docs/wt901-calibration.md.
  * No arbitrary register writes, baud changes, factory reset or boot calibration. */
 extern void platform_log(const char *text);
-typedef enum { IDLE, READING, UNLOCKING, CALIBRATING, CAL_ERROR, DRIFT, CAL_SETTLE } State;
+typedef enum { IDLE, READING, UNLOCKING, CALIBRATING, CAL_ERROR, DRIFT, CAL_SETTLE,
+               TEST_OLD,TEST_UNLOCK,TEST_SETTLE,TEST_VERIFY,TEST_ERROR } State;
 typedef enum { START_ACC, STOP_ACC, SAVE_PARAMS } Write;
 static State state;
 static Write writing;
@@ -17,6 +18,10 @@ static uint32_t began_at, read_count, bad_start, error_start, cool_at;
 static uint32_t angle_count, gyro_count, angle_n, gyro_n;
 static int32_t zero_yaw, last_yaw, yaw_change, gyro_min, gyro_max;
 static int64_t gyro_sum;
+static uint8_t test_reg;
+static uint16_t test_value,test_original;
+static uint32_t test_count,test_at;
+static bool test_check_only;
 
 static void number(int64_t value)
 {
@@ -100,7 +105,7 @@ bool imu_service_tx_enabled(void) { return tx_enabled; }
 
 void imu_service_report(uint32_t now)
 {
-    static const char *const names[] = {"idle", "read", "unlock", "acc-cal", "cal-uncertain", "drift", "cal-settle"};
+    static const char *const names[] = {"idle", "read", "unlock", "acc-cal", "cal-uncertain", "drift", "cal-settle","test-old","test-unlock","test-settle","test-verify","test-uncertain"};
     platform_log("IMU service: state="); platform_log(names[state]);
     platform_log(tx_enabled ? " | TX=ON" : " | TX=OFF");
     platform_log(" | relative_valid="); number(zero_valid && imu_angle_fresh(now));
@@ -111,6 +116,44 @@ void imu_service_report(uint32_t now)
 
 bool imu_service_command(const char *line, uint32_t now)
 {
+    if(!strncmp(line,"imu test ",9)){
+        static const struct {const char *text;uint8_t reg;uint16_t value;} allowed[]={
+          {"imu test rate 1",3,3},
+          {"imu test rate 2",3,4},{"imu test rate 5",3,5},{"imu test rate 10",3,6},
+          {"imu test rate 20",3,7},{"imu test rate 50",3,8},{"imu test rate 100",3,9},{"imu test rate 200",3,11},
+          {"imu test bandwidth 256",0x1f,0},{"imu test bandwidth 188",0x1f,1},
+          {"imu test bandwidth 98",0x1f,2},{"imu test bandwidth 42",0x1f,3},
+          {"imu test bandwidth 20",0x1f,4},{"imu test bandwidth 10",0x1f,5},{"imu test bandwidth 5",0x1f,6}};
+        if(!tx_enabled||cal_maybe_active||(state!=IDLE&&state!=TEST_ERROR)){
+            platform_log("[IMU_TEST_ERROR] TX on, idle and no calibration required; no new write\r\n");return true;
+        }
+        if(read_cooling&&(uint32_t)(now-cool_at)<1000){platform_log("[IMU_TEST_ERROR] wait1s after timeout; no new write\r\n");return true;}
+        read_cooling=false;
+        if(!strcmp(line,"imu test check")){
+            if(state!=TEST_ERROR){platform_log("[IMU_TEST_ERROR] no uncertain parameter transaction\r\n");return true;}
+            test_check_only=true;test_count=imu_data()->reg_samples;test_at=now;
+            if(send_reg(0x27,test_reg))state=TEST_VERIFY;
+            return true;
+        }
+        for(unsigned k=0;k<sizeof allowed/sizeof allowed[0];k++)if(!strcmp(line,allowed[k].text)){
+            if(state==TEST_ERROR){platform_log("[IMU_TEST_ERROR] inspect with imu test check before another write\r\n");return true;}
+            test_reg=allowed[k].reg;test_value=allowed[k].value;test_check_only=false;
+            test_count=imu_data()->reg_samples;test_at=now;
+            if(send_reg(0x27,test_reg))state=TEST_OLD;
+            else platform_log("[IMU_TEST_ERROR] read request failed; no parameter write\r\n");
+            return true;
+        }
+        platform_log("[IMU_TEST_ERROR] only named rate/bandwidth presets; no arbitrary register writes\r\n");return true;
+    }
+    if(!strcmp(line,"imu samples")){
+        const WitImu*d=imu_data();
+        platform_log("IMU samples acc/gyro/angle/quat=");number(d->acc_samples);platform_log("/");number(d->gyro_samples);platform_log("/");number(d->angle_samples);platform_log("/");number(d->quaternion_samples);
+        platform_log(" | age_ms=");number(d->acc_samples?now-d->acc_at:UINT32_MAX);platform_log("/");number(d->gyro_seen?now-d->gyro_at:UINT32_MAX);platform_log("/");number(d->angle_seen?now-d->angle_at:UINT32_MAX);platform_log("/");number(d->quaternion_samples?now-d->quaternion_at:UINT32_MAX);
+        platform_log(" | acc_raw=");for(unsigned k=0;k<3;k++){number(d->acc_raw[k]);platform_log(k==2?"":"/");}
+        platform_log(" | temp_centiC=");number(d->temperature_centi_c);
+        platform_log(" | quaternion_raw=");for(unsigned k=0;k<4;k++){number(d->quaternion_raw[k]);platform_log(k==3?"":"/");}
+        platform_log("; read-only; no accelerometer integration or zero change\r\n");return true;
+    }
     bool tx_on = !strcmp(line, "imu tx on"), tx_off = !strcmp(line, "imu tx off");
     bool cal = !strcmp(line, "imu cal acc"), stop = !strcmp(line, "imu cal stop");
     bool check = !strcmp(line, "imu cal check");
@@ -118,13 +161,15 @@ bool imu_service_command(const char *line, uint32_t now)
     bool zero = !strcmp(line, "imu zero"), cancel = !strcmp(line, "imu cancel");
     static const struct { const char *command; uint8_t base; } reads[] = {
         {"imu read mode", 0x24}, {"imu read output", 0x02},
-        {"imu read filter", 0x1F}, {"imu read version", 0x2E}
+        {"imu read filter", 0x1F}, {"imu read version", 0x2E},
+        {"imu read mounting",0x23},{"imu read gyrocal",0x60},{"imu read sensors",0x70}
     };
     uint8_t base = 0;
     for (unsigned i = 0; i < sizeof reads / sizeof reads[0]; ++i)
         if (!strcmp(line, reads[i].command)) base = reads[i].base;
     if (!(tx_on || tx_off || cal || stop || save || drift || zero || cancel || check || base)) return false;
     if (cancel) {
+        if(state>=TEST_OLD){platform_log("IMU parameter transaction: wait, or imu test check after uncertainty; no blind cancel\r\n");return true;}
         if (cal_maybe_active || (state == UNLOCKING && writing == START_ACC))
             platform_log("IMU calibration may be active; use imu cal stop.\r\n");
         else {
@@ -216,6 +261,41 @@ bool imu_service_command(const char *line, uint32_t now)
 void imu_service_tick(uint32_t now)
 {
     const WitImu *d = imu_data();
+    if(state==TEST_OLD||state==TEST_VERIFY){
+        if((uint32_t)(now-test_at)>=500){
+            bool wrote=state==TEST_VERIFY;state=wrote?TEST_ERROR:IDLE;read_cooling=true;cool_at=now;
+            platform_log(wrote?"[IMU_TEST_ERROR] readback timeout; parameters UNCERTAIN; motion locked; imu test check\r\n":"[IMU_TEST_ERROR] pre-read timeout; no parameter write\r\n");return;
+        }
+        if(d->reg_samples!=test_count){
+            uint16_t actual=d->reg_words[0];
+            if(state==TEST_OLD){
+                test_original=actual;
+                bool known=test_reg==3?((actual>=1&&actual<=9)||actual==11):actual<=6;
+                if(!known){state=IDLE;platform_log("[IMU_TEST_ERROR] unsupported original value; no parameter write\r\n");return;}
+                if(actual==test_value){state=IDLE;platform_log("[IMU_TEST_OK] unchanged; no parameter write/save\r\n");return;}
+                if(!send_reg(0x69,0xB588)){state=IDLE;platform_log("[IMU_TEST_ERROR] unlock failed; no parameter write\r\n");return;}
+                state=TEST_UNLOCK;test_at=now;return;
+            }
+            if(test_check_only){
+                bool known=test_reg==3?((actual>=1&&actual<=9)||actual==11):actual<=6;
+                if(!known){state=TEST_ERROR;platform_log("[IMU_TEST_ERROR] unknown parameter after check; motion remains locked\r\n");return;}
+                state=IDLE;platform_log("[IMU_TEST_RECOVERED] reg=0x");hex16(test_reg);platform_log(" actual=0x");hex16(actual);platform_log("; query only, no save; inspect configuration\r\n");return;
+            }
+            if(actual!=test_value){state=TEST_ERROR;platform_log("[IMU_TEST_ERROR] parameter readback differs; motion locked; imu test check\r\n");return;}
+            state=IDLE;platform_log("[IMU_TEST_OK] reg=0x");hex16(test_reg);platform_log(" value=0x");hex16(actual);platform_log(" original=0x");hex16(test_original);platform_log("; volatile test only, NOT saved\r\n");return;
+        }
+        return;
+    }
+    if(state==TEST_UNLOCK&&(uint32_t)(now-test_at)>=20){
+        if(!send_reg(test_reg,test_value)){state=TEST_ERROR;platform_log("[IMU_TEST_ERROR] parameter TX failed; state uncertain; motion locked\r\n");return;}
+        state=TEST_SETTLE;test_at=now;return;
+    }
+    if(state==TEST_SETTLE&&(uint32_t)(now-test_at)>=100){
+        test_count=d->reg_samples;test_at=now;
+        if(send_reg(0x27,test_reg))state=TEST_VERIFY;
+        else{state=TEST_ERROR;platform_log("[IMU_TEST_ERROR] readback TX failed; motion locked\r\n");}return;
+    }
+    if(state>=TEST_OLD)return;
     if (state == UNLOCKING && (uint32_t)(now - began_at) >= 20U) {
         /* Official normal-protocol SDK waits >=1ms after unlock; use 20ms margin. */
         if (writing == START_ACC) cal_maybe_active = true;

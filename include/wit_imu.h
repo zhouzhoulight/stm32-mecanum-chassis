@@ -18,6 +18,8 @@ typedef struct {
     int16_t acc_raw[3], mag_raw[3];
     uint16_t angle_word4, reg_words[4];
     uint32_t acc_samples, mag_samples, reg_samples, reg_at;
+    uint32_t acc_at,mag_at,quaternion_at,quaternion_samples;
+    int16_t quaternion_raw[4],temperature_centi_c;
 } WitImu;
 
 void imu_init(void);

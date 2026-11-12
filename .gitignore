@@ -22,3 +22,17 @@ tests/
 .env
 .env.*
 arm/project/MDK-ARM/DebugConfig/
+
+# Local-only verification outputs and private configuration
+*.elf
+*.axf
+*.mat
+*.mex*
+*.pcap
+*.pcapng
+artifacts/
+runtime/
+captures/
+simulations/
+*.pem
+*.key

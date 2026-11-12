@@ -45,6 +45,10 @@ int Board_CalWrite(const void *payload,uint32_t bytes)
     __HAL_FLASH_CLEAR_FLAG(FLASH_FLAG_EOP|FLASH_FLAG_OPERR|FLASH_FLAG_WRPERR|FLASH_FLAG_PGAERR|FLASH_FLAG_PGPERR|FLASH_FLAG_PGSERR);
 #endif
     if(index==RECORDS){
+#ifdef ARM_NAV_BUILD
+        /* No multi-second sector erase under live chassis watchdog/UARTs. */
+        HAL_FLASH_Lock();return 0;
+#endif
         FLASH_EraseInitTypeDef erase={0};erase.TypeErase=FLASH_TYPEERASE_SECTORS;
         erase.Sector=FLASH_SECTOR_7;erase.NbSectors=1;erase.VoltageRange=FLASH_VOLTAGE_RANGE_3;
         if(HAL_FLASHEx_Erase(&erase,&error)!=HAL_OK)ok=0;index=0;

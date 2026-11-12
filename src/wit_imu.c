@@ -67,8 +67,13 @@ void imu_feed(uint8_t byte, uint32_t now)
         } else if (frame[1] == 0x51U || frame[1] == 0x54U) {
             int16_t *axes = frame[1] == 0x51U ? data.acc_raw : data.mag_raw;
             for (unsigned i = 0; i < 3; ++i) axes[i] = (int16_t)scaled(frame + 2 + 2*i, 32768);
-            if (frame[1] == 0x51U) ++data.acc_samples;
-            else ++data.mag_samples;
+            if (frame[1] == 0x51U) {
+                ++data.acc_samples;data.acc_at=now;
+                data.temperature_centi_c=(int16_t)((uint16_t)frame[8]|((uint16_t)frame[9]<<8));
+            }else{++data.mag_samples;data.mag_at=now;}
+        } else if(frame[1]==0x59U){
+            for(unsigned k=0;k<4;k++)data.quaternion_raw[k]=(int16_t)((uint16_t)frame[2+2*k]|((uint16_t)frame[3+2*k]<<8));
+            data.quaternion_at=now;++data.quaternion_samples;
         } else if (frame[1] == 0x5FU) {
             for (unsigned i = 0; i < 4; ++i)
                 data.reg_words[i] = (uint16_t)(frame[2+2*i] | (uint16_t)frame[3+2*i] << 8);

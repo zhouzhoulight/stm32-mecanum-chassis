@@ -2,23 +2,28 @@
 #include "nav/nav_app.h"
 #include "nav/nav_bus.h"
 #include "nav/nav_odom.h"
+#include "nav/nav_lidar.h"
 #include "nav/nav_platform.h"
 #include "wit_imu.h"
 #include "imu_service.h"
+#include "nav/nav_arm.h"
+#include "nav/nav_vision.h"
+#include "nav/nav_mission.h"
 #include <string.h>
 #include <stdio.h>
 #include <stdarg.h>
-static UART_HandleTypeDef motor_uart,console_uart,imu_uart;
+static UART_HandleTypeDef motor_uart,console_uart,imu_uart,vision_uart,lidar_uart;
 void _init(void){}
 #define RX_CAPACITY 512U
 typedef struct {volatile uint16_t head,tail;volatile bool fault;uint8_t bytes[RX_CAPACITY];uint32_t at[RX_CAPACITY];} Ring;
-static Ring motor_rx,console_rx,imu_rx;
+static Ring motor_rx,console_rx,imu_rx,vision_rx,lidar_rx;
 static volatile bool emergency_byte;
 static uint8_t motor_tx[16];static volatile unsigned motor_n,motor_offset;
 static volatile bool motor_busy;static volatile uint32_t motor_end;
 #define LOG_N 8192U
 static char log_bytes[LOG_N];static volatile unsigned log_head,log_tail;
 static uint32_t log_drops,main_max;
+static uint32_t angle_samples,gyro_samples,acc_samples,acc_log_at,attitude_log_at;
 static void rx_irq(USART_TypeDef *u,Ring *r)
 {
  uint32_t flags=u->SR;
@@ -39,7 +44,21 @@ void USART1_IRQHandler(void)
   else USART1->CR1&=~USART_CR1_TXEIE;
  }
 }
+static uint8_t lidar_tx[512];static volatile unsigned lidar_head,lidar_tail;
+static bool lidar_send(const uint8_t *p,unsigned n){
+ if(!p||!n||n>((lidar_tail-lidar_head-1)&511))return false;
+ for(unsigned k=0;k<n;k++){lidar_tx[lidar_head]=p[k];lidar_head=(lidar_head+1)&511;}
+ __DMB();USART2->CR1|=USART_CR1_TXEIE;return true;
+}
+void USART2_IRQHandler(void){
+ rx_irq(USART2,&lidar_rx);
+ if((USART2->CR1&USART_CR1_TXEIE)&&(USART2->SR&USART_SR_TXE)){
+  if(lidar_tail!=lidar_head){USART2->DR=lidar_tx[lidar_tail];lidar_tail=(lidar_tail+1)&511;}
+  else USART2->CR1&=~USART_CR1_TXEIE;
+ }
+}
 void USART3_IRQHandler(void){rx_irq(USART3,&imu_rx);}
+void UART5_IRQHandler(void){rx_irq(UART5,&vision_rx);}
 void UART4_IRQHandler(void)
 {
  rx_irq(UART4,&motor_rx);
@@ -110,7 +129,10 @@ static void uart_init(void)
     GPIO_InitTypeDef io = {0};
     __HAL_RCC_GPIOA_CLK_ENABLE();
     __HAL_RCC_GPIOD_CLK_ENABLE();
+    __HAL_RCC_GPIOC_CLK_ENABLE();
+    __HAL_RCC_UART5_CLK_ENABLE();
     __HAL_RCC_USART1_CLK_ENABLE();
+    __HAL_RCC_USART2_CLK_ENABLE();
     __HAL_RCC_UART4_CLK_ENABLE();
     __HAL_RCC_USART3_CLK_ENABLE();
 
@@ -126,6 +148,7 @@ static void uart_init(void)
     io.Alternate = GPIO_AF8_UART4;
     HAL_GPIO_Init(GPIOA, &io);
 
+    io.Pin=GPIO_PIN_2|GPIO_PIN_3;io.Alternate=GPIO_AF7_USART2;HAL_GPIO_Init(GPIOA,&io);
     /* IMU: PD9 RX, AF7. PD8 stays high-impedance; no sensor writes. */
     io.Pin = GPIO_PIN_8;
     io.Mode = GPIO_MODE_INPUT;
@@ -137,6 +160,8 @@ static void uart_init(void)
     io.Alternate = GPIO_AF7_USART3;
     HAL_GPIO_Init(GPIOD, &io);
 
+    io.Pin=GPIO_PIN_12;io.Alternate=GPIO_AF8_UART5;HAL_GPIO_Init(GPIOC,&io);
+    io.Pin=GPIO_PIN_2;HAL_GPIO_Init(GPIOD,&io);
     motor_uart.Instance = UART4;
     motor_uart.Init.BaudRate = 115200;
     motor_uart.Init.WordLength = UART_WORDLENGTH_8B;
@@ -145,23 +170,29 @@ static void uart_init(void)
     motor_uart.Init.Mode = UART_MODE_TX_RX;
     motor_uart.Init.HwFlowCtl = UART_HWCONTROL_NONE;
     motor_uart.Init.OverSampling = UART_OVERSAMPLING_16;
+    lidar_uart=motor_uart;lidar_uart.Instance=USART2;lidar_uart.Init.BaudRate=230400;
     console_uart = motor_uart;
     console_uart.Instance = USART1;
+    vision_uart=motor_uart;vision_uart.Instance=UART5;
     imu_uart = motor_uart;
     imu_uart.Instance = USART3;
     imu_uart.Init.BaudRate = IMU_DEFAULT_BAUD;
     imu_uart.Init.Mode = UART_MODE_RX;
     if (HAL_UART_Init(&motor_uart) != HAL_OK || HAL_UART_Init(&console_uart) != HAL_OK ||
-        HAL_UART_Init(&imu_uart) != HAL_OK) while (1) {}
+        HAL_UART_Init(&imu_uart) != HAL_OK||HAL_UART_Init(&vision_uart)!=HAL_OK||HAL_UART_Init(&lidar_uart)!=HAL_OK) while (1) {}
+    HAL_NVIC_SetPriority(USART2_IRQn,3,0);HAL_NVIC_EnableIRQ(USART2_IRQn);
+    __HAL_UART_ENABLE_IT(&lidar_uart,UART_IT_RXNE);
     HAL_NVIC_SetPriority(USART1_IRQn, 2, 0);
     HAL_NVIC_SetPriority(UART4_IRQn, 2, 0);
     HAL_NVIC_SetPriority(USART3_IRQn, 1, 0);
     HAL_NVIC_EnableIRQ(USART1_IRQn);
     HAL_NVIC_EnableIRQ(UART4_IRQn);
     HAL_NVIC_EnableIRQ(USART3_IRQn);
+    HAL_NVIC_SetPriority(UART5_IRQn,3,0);HAL_NVIC_EnableIRQ(UART5_IRQn);
     __HAL_UART_ENABLE_IT(&motor_uart, UART_IT_RXNE);
     __HAL_UART_ENABLE_IT(&console_uart, UART_IT_RXNE);
     __HAL_UART_ENABLE_IT(&imu_uart, UART_IT_RXNE);
+    __HAL_UART_ENABLE_IT(&vision_uart, UART_IT_RXNE);
 }
 
 /* Only IMU service uses these callbacks; never routed to motor_uart. */
@@ -179,7 +210,9 @@ bool platform_imu_tx_enable(bool enable)
     io.Alternate = GPIO_AF7_USART3;
     HAL_GPIO_Init(GPIOD, &io);
     __HAL_UART_ENABLE_IT(&imu_uart, UART_IT_RXNE);
+    __HAL_UART_ENABLE_IT(&vision_uart, UART_IT_RXNE);
     HAL_NVIC_EnableIRQ(USART3_IRQn);
+    HAL_NVIC_SetPriority(UART5_IRQn,3,0);HAL_NVIC_EnableIRQ(UART5_IRQn);
     return result == HAL_OK;
 }
 
@@ -195,24 +228,55 @@ bool platform_imu_send(const uint8_t *bytes, size_t len)
  * A reset re-enters boot FE+disable; lost power/physical bus remains external. */
 static void watchdog_init(void)
 {__HAL_DBGMCU_UNFREEZE_IWDG();IWDG->KR=0xCCCC;IWDG->KR=0x5555;IWDG->PR=4;IWDG->RLR=499;while(IWDG->SR){}IWDG->KR=0xAAAA;}
+static void service_feedback(void)
+{
+ uint8_t byte;uint32_t at;
+ if(take_flag(&lidar_rx.fault))nav_lidar_error();
+ unsigned lidar_budget=512;while(lidar_budget--&&pop(&lidar_rx,&byte,&at))nav_lidar_feed(byte,at);
+ if(take_flag(&motor_rx.fault))nav_bus_uart_error();
+ if(take_flag(&imu_rx.fault))imu_uart_error();
+ while(pop(&motor_rx,&byte,&at))nav_bus_feed(byte,at);
+ while(pop(&imu_rx,&byte,&at)){
+  imu_feed(byte,at);const WitImu *i=imu_data();
+  if(i->gyro_samples!=gyro_samples){gyro_samples=i->gyro_samples;nav_logf("G,%lu,%ld\r\n",(unsigned long)i->gyro_at,(long)i->z_mdps);}
+  if(i->acc_samples!=acc_samples){
+   acc_samples=i->acc_samples;
+   if((uint32_t)(i->acc_at-acc_log_at)>=50){acc_log_at=i->acc_at;nav_logf("C,%lu,%d,%d,%d,%d\r\n",(unsigned long)i->acc_at,i->acc_raw[0],i->acc_raw[1],i->acc_raw[2],i->temperature_centi_c);}
+  }
+  if(i->angle_samples!=angle_samples){
+   angle_samples=i->angle_samples;nav_odom_yaw(i->yaw_mdeg,i->angle_at);
+   if((uint32_t)(i->angle_at-attitude_log_at)>=50){attitude_log_at=i->angle_at;nav_logf("R,%lu,%ld,%ld,%ld\r\n",(unsigned long)i->angle_at,(long)i->roll_mdeg,(long)i->pitch_mdeg,(long)i->yaw_mdeg);}
+  }
+ }
+}
+bool nav_hw_plan_service(void)
+{
+ static uint32_t serviced;uint32_t now=HAL_GetTick();
+ if(take_flag(&emergency_byte))nav_app_emergency(now,"operator ! during planning");
+ if((nav_app_state()!=0&&!nav_app_replanning())||nav_bus_data()->tx_fault)return false;
+ if(now-serviced<2)return true;
+ serviced=now;
+ /* Called only by the idle planner. No console parsing, origin changes,
+  * enables or velocity requests; retain the normal feedback time stamps. */
+ IWDG->KR=0xAAAA;service_feedback();
+ nav_arm_tick(!nav_bus_data()->stopping);nav_app_tick(HAL_GetTick());
+ return (nav_app_state()==0||nav_app_replanning())&&!nav_bus_data()->tx_fault;
+}
 int main(void)
 {
  HAL_Init();clock_init();uart_init();
  CoreDebug->DEMCR|=CoreDebug_DEMCR_TRCENA_Msk;DWT->CYCCNT=0;DWT->CTRL|=DWT_CTRL_CYCCNTENA_Msk;
- watchdog_init();nav_app_init(HAL_GetTick());
- char line[100];unsigned len=0;bool overflow=false;uint32_t angle_samples=0;
+ nav_lidar_init(lidar_send);
+ watchdog_init();nav_app_init(HAL_GetTick());nav_arm_init();nav_mission_init();
+ char line[100];unsigned len=0;bool overflow=false;
  for(;;){
   uint32_t start=DWT->CYCCNT,now=HAL_GetTick(),at;uint8_t byte;
   if(!nav_bus_data()->tx_fault)IWDG->KR=0xAAAA;
   if(take_flag(&emergency_byte)){len=0;overflow=false;nav_app_emergency(now,"operator ! byte");}
-  if(take_flag(&motor_rx.fault))nav_bus_uart_error();
-  if(take_flag(&imu_rx.fault))imu_uart_error();
+  if(take_flag(&vision_rx.fault))nav_vision_error();
+  while(pop(&vision_rx,&byte,&at))nav_vision_feed(byte,at);
   if(take_flag(&console_rx.fault)){len=0;overflow=true;nav_app_emergency(now,"console RX overrun");}
-  while(pop(&motor_rx,&byte,&at))nav_bus_feed(byte,at);
-  while(pop(&imu_rx,&byte,&at)){
-   imu_feed(byte,at);const WitImu *i=imu_data();
-   if(i->angle_samples!=angle_samples){angle_samples=i->angle_samples;nav_odom_yaw(i->yaw_mdeg,i->angle_at);}
-  }
+  service_feedback();
   unsigned console_bytes=0,console_commands=0;
   while(console_bytes<64&&console_commands<2&&pop(&console_rx,&byte,&at)){
    console_bytes++;
@@ -223,7 +287,14 @@ int main(void)
    }else if(byte=='\t'||(byte>=32&&byte<127)){if(len+1<sizeof line)line[len++]=(char)byte;else overflow=true;}
    else overflow=true;
   }
+  /* Phase7 permits idle lift feedback reads only after entering with no
+   * arm task and a known transport hold. Motion commands remain blocked. */
+  nav_arm_tick((!nav_app_active()||nav_app_state()<4||nav_app_state()==7)&&!nav_bus_data()->stopping);
   nav_app_tick(HAL_GetTick()); /* RX/idle calibration may advance time after loop entry. */
+  nav_mission_tick(HAL_GetTick());
   uint32_t duration=DWT->CYCCNT-start;if(duration>main_max)main_max=duration;
  }
 }
+
+bool nav_vision_hw_send(const uint8_t *p,size_t n)
+{return n<=38&&HAL_UART_Transmit(&vision_uart,(uint8_t*)p,(uint16_t)n,10)==HAL_OK;}

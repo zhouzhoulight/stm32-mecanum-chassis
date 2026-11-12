@@ -9,27 +9,66 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <stdbool.h>
 #include "profile_store.h"
 
-#define VERSION "GC1_ARM_F407VE_USART1_20261028_R9D"
-#define SERVO_COUNT 3
+#define VERSION "GC1_ARM_F407VE_USART1_20261102_R9E"
+#define SERVO_COUNT 4
+
+#ifndef STUDIO_LIFT_RPM
+#define STUDIO_ROUTE_RPM 200
+#define STUDIO_ROUTE_ACCEL 600
+#define STUDIO_ROUTE_YAW 1000
+#define STUDIO_LIFT_RPM 60
+#define STUDIO_LIFT_ACCEL 80
+#define STUDIO_JAW_RATE 900
+#define STUDIO_TURN_RATE 700
+#define STUDIO_TRAY_RATE 700
+#define STUDIO_POLL_MS 100
+#define STUDIO_DWELL_MS 80
+#define STUDIO_STABLE_MS 200
+#define STUDIO_SPREAD 1
+#define STUDIO_WORK_RPM 30
+#define STUDIO_IMU_DELAY 55
+#define STUDIO_ALGORITHM 0
+#define STUDIO_FUSED 0
+#define STUDIO_FEATURES 3
+#define STUDIO_ARM_RADIUS 0
+#define STUDIO_ARM_X 0
+#define STUDIO_ARM_Y 0
+#define STUDIO_TURN_SETTLE 200
+#endif
+#ifndef STUDIO_SERVO_SMOOTH
+#define STUDIO_SERVO_SMOOTH 0
+#endif
+
 #define ADDR 5U
 #define MASK 255U
 typedef struct { volatile unsigned short head,tail; volatile unsigned char err; unsigned char b[256]; } Ring;
 static Ring motor_rx, debug_rx;
 static unsigned short servo[SERVO_COUNT],goal[SERVO_COUNT];
 static unsigned char servo_on[SERVO_COUNT];
-static const unsigned short smin[SERVO_COUNT]={1380,870,550},smax[SERVO_COUNT]={2260,2500,2350};
+static const unsigned short smin[SERVO_COUNT]={1380,870,550,500},smax[SERVO_COUNT]={2260,2500,2350,2500};
 static unsigned short jaw_low=1560,jaw_high=2260;
-static const uint32_t channels[SERVO_COUNT]={TIM_CHANNEL_1,TIM_CHANNEL_2,TIM_CHANNEL_3};
+static const uint32_t channels[SERVO_COUNT]={TIM_CHANNEL_1,TIM_CHANNEL_2,TIM_CHANNEL_3,TIM_CHANNEL_4};
 static unsigned long servo_tick;
-static unsigned short servo_rate[SERVO_COUNT]={250,20,100},turn_low,turn_high;
-static uint32_t servo_credit[SERVO_COUNT];
+static unsigned short servo_rate[SERVO_COUNT]={250,20,100,100},turn_low,turn_high;
+static uint32_t servo_credit[SERVO_COUNT],servo_done_tick[SERVO_COUNT];
+static unsigned char servo_smooth=STUDIO_SERVO_SMOOTH,servo_profile_active[SERVO_COUNT];
+#ifndef STUDIO_COMPACT
+#define STUDIO_COMPACT 1
+#endif
+static unsigned char compact_work=STUDIO_COMPACT;
+static unsigned short servo_profile_goal[SERVO_COUNT],servo_profile_start[SERVO_COUNT];
+static unsigned long servo_profile_tick[SERVO_COUNT],servo_profile_duration[SERVO_COUNT];
+static unsigned short tune_turn_settle=STUDIO_TURN_SETTLE;
+static unsigned char turn_physically_settled(unsigned long now);
 static unsigned char packet[40],packet_len,pending,flags,flags_valid,pos_valid,config_valid;
 static unsigned char pending_quiet,tx_quiet;
 static unsigned long packet_tick,pending_tick,flag_tick,pos_tick;
 static uint32_t pulses_per_rev=3200;
 static unsigned short lift_rpm=5,lift_accel=10,arrival_window_ddeg;
+static unsigned short tune_lift=STUDIO_LIFT_RPM,tune_accel=STUDIO_LIFT_ACCEL,tune_jaw=STUDIO_JAW_RATE,tune_turn=STUDIO_TURN_RATE,tune_tray=STUDIO_TRAY_RATE,tune_poll=STUDIO_POLL_MS,tune_dwell=STUDIO_DWELL_MS,tune_stable=STUDIO_STABLE_MS,tune_spread=STUDIO_SPREAD;
 static uint64_t arrival_window_scaled;
 static unsigned short app_window_pulses;
 static int64_t stable_min_raw,stable_max_raw;
@@ -47,6 +86,7 @@ static long stop_position,stop_target,stop_origin;
 static int64_t stop_position_raw,stop_driver_target_raw;
 static unsigned char stop_flags,stop_target_verified,stop_arrival_count;
 static unsigned long move_tick,move_timeout,poll_tick;
+static long move_delta_pulses; /* v2.7.13: pulses commanded by the active FD */
 static unsigned char poll_flags;
 static unsigned char trace_enabled,trace_index,current_valid,pid_valid;
 static unsigned short phase_current_ma;
@@ -88,6 +128,9 @@ static const char *const point_names[4]={"tray","rough","stack","swing"};
 static long point_height[4];
 /* The task clearance is a physical pose; coordinate rebasing must not move it. */
 static long clearance_height;
+static long camera_height[2];
+static unsigned char camera_mask;
+static const char *const camera_names[2]={"view","qr"};
 static unsigned char datum_capture;
 static long datum_capture_local;
 static unsigned char point_mask,point_capture,motion_mode=1,requested_job;
@@ -108,6 +151,7 @@ static unsigned char measure_frame_known;
 typedef struct {uint32_t schema;int32_t saved_origin;int32_t heights[4];uint32_t mask,mode;} CalRecord;
 typedef struct {CalRecord base;int32_t grab_heights[2];uint32_t grab_mask;} CalRecordV10;
 typedef struct {CalRecordV10 prior;int32_t clearance;} CalRecordV11;
+typedef struct {CalRecordV11 prior;int32_t camera[2];uint32_t camera_mask;} CalRecordV12;
 enum { MEAS_OFF,MEAS_DISABLING,MEAS_FREE,MEAS_STILL,MEAS_ZERO_ACK,
        MEAS_ZERO_VERIFY,MEAS_ENABLING,MEAS_ERROR };
 static unsigned char measure_state,measure_ack,measure_capture,measure_mask;
@@ -122,7 +166,11 @@ static void say(const char *fmt,...)
     va_start(args,fmt); n=vsnprintf(text,sizeof(text),fmt,args); va_end(args);
     if(n<0)return;
     if(n>=(int)sizeof(text))n=sizeof(text)-1;
+#ifdef ARM_NAV_BUILD
+    nav_log(text);
+#else
     HAL_UART_Transmit(&huart4,(uint8_t*)text,(uint16_t)n,25);
+#endif
 }
 static void irq_read(USART_TypeDef *uart,Ring *r)
 {
@@ -139,7 +187,11 @@ void ArmTask_DebugIRQ(void){irq_read(huart4.Instance,&debug_rx);}
 static int tx(const unsigned char *b,unsigned short n)
 {
     char hex[80]; unsigned int j;
+#ifdef ARM_NAV_BUILD
+    HAL_StatusTypeDef result=nav_bus_lift_submit(b,n)?HAL_OK:HAL_BUSY;
+#else
     HAL_StatusTypeDef result=HAL_UART_Transmit(&huart1,(uint8_t*)b,n,20);
+#endif
     for(j=0;j<n;j++)sprintf(hex+j*3,"%02X ",b[j]); hex[n*3]=0;
     if(!tx_quiet||result!=HAL_OK)say("[TX1] %s status=%u\r\n",hex,(unsigned int)result);
     return result==HAL_OK;
@@ -185,16 +237,18 @@ static int fresh(void)
 static int lift_ready(void){return !measure_state&&referenced&&fresh()&&(flags&1U)&&!(flags&12U)&&!fault;}
 static void motion_apply(void)
 {
-    lift_rpm=motion_mode==1?60:(motion_mode==2?20:30);
-    lift_accel=motion_mode==1?80:20;app_window_pulses=20;
-    servo_rate[0]=motion_mode==1?900:(motion_mode==2?200:400);
-    servo_rate[1]=servo_rate[2]=motion_mode==1?700:(motion_mode==2?200:300);
+    lift_rpm=motion_mode==1?tune_lift:(motion_mode==2?20:30);
+    lift_accel=motion_mode==1?tune_accel:20;app_window_pulses=20;
+    servo_rate[0]=motion_mode==1?tune_jaw:(motion_mode==2?200:400);
+    servo_rate[1]=motion_mode==1?tune_turn:(motion_mode==2?200:300);
+    servo_rate[2]=motion_mode==1?tune_tray:(motion_mode==2?200:300);
 }
 static long profile_high(void)
 {
     long high=clearance_height>0?clearance_height:0;int i;
     for(i=0;i<2;i++)if((grab_height_mask&(1U<<i))&&grab_height[i]>high)high=grab_height[i];
     for(i=0;i<3;i++)if((point_mask&(1U<<i))&&point_height[i]>high)high=point_height[i];
+    for(i=0;i<2;i++)if((camera_mask&(1U<<i))&&camera_height[i]>high)high=camera_height[i];
     return high+30>6000?6000:high+30;
 }
 static long profile_low(void)
@@ -202,12 +256,19 @@ static long profile_low(void)
     long low=clearance_height<0?clearance_height:0;int i;
     for(i=0;i<2;i++)if((grab_height_mask&(1U<<i))&&grab_height[i]<low)low=grab_height[i];
     for(i=0;i<3;i++)if((point_mask&(1U<<i))&&point_height[i]<low)low=point_height[i];
+    for(i=0;i<2;i++)if((camera_mask&(1U<<i))&&camera_height[i]<low)low=camera_height[i];
     low-=100;return low < -6000 ? -6000 : low;
 }
 static void cal_load(void)
 {
-    CalRecord c;CalRecordV10 n;CalRecordV11 latest;long clear=0;int i,extended=0;
-    if(Board_CalRead(&latest,sizeof(latest))&&latest.prior.base.schema==11){
+    CalRecord c;CalRecordV10 n;CalRecordV11 latest;CalRecordV12 v12;long clear=0;int i,extended=0;
+    if(Board_CalRead(&v12,sizeof(v12))&&v12.prior.prior.base.schema==12){
+        if(v12.camera_mask>3)return;
+        for(i=0;i<2;i++)if(v12.camera[i]<-5900||v12.camera[i]>5900)return;
+        camera_mask=(unsigned char)v12.camera_mask;
+        for(i=0;i<2;i++)camera_height[i]=v12.camera[i];
+        latest=v12.prior;n=latest.prior;c=n.base;clear=latest.clearance;extended=1;
+    }else if(Board_CalRead(&latest,sizeof(latest))&&latest.prior.base.schema==11){
         n=latest.prior;c=n.base;clear=latest.clearance;extended=1;
     }else if(Board_CalRead(&n,sizeof(n))&&n.base.schema==10){
         c=n.base;extended=1;
@@ -226,14 +287,15 @@ static void cal_load(void)
 }
 static int cal_save_now(void)
 {
-    CalRecordV10 c;CalRecordV11 record;int i,ok;
-    memset(&c,0,sizeof(c));c.base.schema=11;
+    CalRecordV10 c;CalRecordV11 record;CalRecordV12 v12;int i,ok;
+    memset(&c,0,sizeof(c));c.base.schema=12;
     c.base.saved_origin=referenced?origin:
         ((measure_state==MEAS_FREE&&measure_keep_ref)?measure_keep_origin:cal_saved_origin);
     for(i=0;i<4;i++)c.base.heights[i]=(int32_t)point_height[i];c.base.mask=point_mask;c.base.mode=motion_mode;
     c.grab_heights[0]=(int32_t)grab_height[0];c.grab_heights[1]=(int32_t)grab_height[1];c.grab_mask=grab_height_mask;
     record.prior=c;record.clearance=(int32_t)clearance_height;
-    ok=Board_CalWrite(&record,sizeof(record));
+    v12.prior=record;v12.camera_mask=camera_mask;for(i=0;i<2;i++)v12.camera[i]=(int32_t)camera_height[i];
+    ok=Board_CalWrite(&v12,sizeof(v12));
     if(ok){cal_saved_origin=c.base.saved_origin;cal_stored=1;say("[SAVED] work/grab heights/mode/datum verified in Flash; driver reset still requires physical reference\r\n");}
     else say("[E] calibration Flash save failed\r\n");return ok;
 }
@@ -249,6 +311,7 @@ static void points_print(void)
     say("[DATUM] active=%u origin=%ld saved_origin=%ld local=%ld; saved counter requires SAME Emm session\r\n",referenced,origin,cal_saved_origin,
         referenced?position-origin:(measure_frame_known?position-measure_hold_origin:(measure_keep_ref?position-measure_keep_origin:0)));
     for(i=0;i<4;i++)say("[POINT] %s=%ld valid=%u local pulse\r\n",point_names[i],point_height[i],!!(point_mask&(1U<<i)));
+    for(i=0;i<2;i++)say("[CAMERA_HEIGHT] %s=%ld valid=%u; not used by chassis route\r\n",camera_names[i],camera_height[i],!!(camera_mask&(1U<<i)));
     say("[PERFORMANCE] mode=%s rpm=%u accel=%u rate=%u,%u,%u; swing=%ld; flash_saved=%u\r\n",
         motion_mode==1?"fast":(motion_mode==2?"slow":"normal"),lift_rpm,lift_accel,servo_rate[0],servo_rate[1],servo_rate[2],
         point_mask&8?point_height[3]:0,cal_stored);
@@ -277,6 +340,12 @@ static void point_position(void)
     if(!point_capture)return;i=point_capture-1;point_capture=0;
     if(fault||(!referenced&&!(measure_state==MEAS_FREE&&measure_keep_ref))){say("[E] point: no retained datum\r\n");return;}
     local=position-(referenced?origin:measure_keep_origin);
+    if(i==7||i==8){
+        if(local<-5900||local>5900){say("[E] camera height outside bounds\r\n");return;}
+        i-=7;camera_height[i]=local;camera_mask|=(1U<<i);cal_stored=0;
+        if(referenced){low_limit=profile_low();high_limit=profile_high();}
+        say("[CAMERA_HEIGHT_SAVED] %s=%ld; save to persist; no automatic move\r\n",camera_names[i],local);return;
+    }
     if(i==6){
         if(local<-5900||local>5900){say("[E] clearance outside coordinate bounds\r\n");return;}
         for(i=0;i<2;i++)if((grab_height_mask&(1U<<i))&&grab_height[i]<local){say("[E] clearance must be above contacts\r\n");return;}
@@ -292,7 +361,7 @@ static void point_position(void)
 }
 static void datum_position(void)
 {
-    unsigned char mode=datum_capture;long old_origin,shift=0,new_clear,new_points[4],new_grab[2];int i;
+    unsigned char mode=datum_capture;long old_origin,shift=0,new_clear,new_points[4],new_grab[2],new_camera[2];int i;
     if(!mode)return;datum_capture=0;
     if(fault||moving||task_active||grab_active||grab_preparing||work_active||servo_busy()||!fresh()||
        (flags&12U)||idle_stable_count<3||HAL_GetTick()-idle_stable_tick<200UL){
@@ -313,12 +382,16 @@ static void datum_position(void)
             new_grab[i]=(grab_height_mask&(1U<<i))?grab_height[i]-shift:0;
             if(new_grab[i]<-5900||new_grab[i]>5900)goto range;
         }
+        for(i=0;i<2;i++){
+            new_camera[i]=(camera_mask&(1U<<i))?camera_height[i]-shift:0;
+            if(new_camera[i]<-5900||new_camera[i]>5900)goto range;
+        }
         /* Commit only after every translated coordinate passed its bounds. */
-        clearance_height=new_clear;
+        clearance_height=new_clear;for(i=0;i<2;i++)camera_height[i]=new_camera[i];
         for(i=0;i<4;i++)point_height[i]=new_points[i];
         for(i=0;i<2;i++)grab_height[i]=new_grab[i];
     }else if(mode==2){
-        clearance_height=0;point_mask=grab_height_mask=0;
+        clearance_height=0;point_mask=grab_height_mask=camera_mask=0;memset(camera_height,0,sizeof camera_height);
         memset(point_height,0,sizeof(point_height));memset(grab_height,0,sizeof(grab_height));
     }
     origin=position-(mode==3?datum_capture_local:0);
@@ -477,7 +550,7 @@ static void arrival_sample(void)
     if(position_raw<stable_min_raw)stable_min_raw=position_raw;
     if(position_raw>stable_max_raw)stable_max_raw=position_raw;
     spread=(stable_max_raw-stable_min_raw)*(int64_t)pulses_per_rev;
-    if(spread>65536){
+    if(spread>(int64_t)65536*tune_spread){
         stable_min_raw=stable_max_raw=position_raw;stable_tick=HAL_GetTick();arrival_count=1;
     }else if(arrival_count<255)arrival_count++;
 }
@@ -487,6 +560,23 @@ static int move_to(long local)
     long delta,destination; uint32_t count,distance; uint64_t timeout;
     if(!lift_ready()||moving||pending||probe_active||local<low_limit||local>high_limit)return 0;
     destination=origin+local;delta=destination-position;
+    /* v2.7.13 (field bug, 2026-11-05 station=4 raw2): a commanded delta of only a
+     * few pulses must not be sent as an FD absolute-position command. The driver
+     * then answers 0x33 with the PREVIOUS target (e.g. commanded -2306, read back
+     * -2300.7) and the strict check below halts. When the measured encoder is
+     * already inside the destination application window, the pose is physically
+     * complete, so report ALREADY_STABLE without requiring the 3-sample/200 ms
+     * idle-stability counter. Larger deltas keep the original path. */
+    if(app_window_pulses&&labs(delta)<=(long)app_window_pulses&&pos_valid){
+        int64_t e=position_raw*(int64_t)pulses_per_rev-(int64_t)destination*65536;
+        int64_t w=(int64_t)app_window_pulses*65536;
+        if(e>=-w&&e<=w){
+            target=destination;target_confirmed=driver_target_valid=0;arrival_count=0;lift_skip_count++;
+            say("[LIFT_SKIP_SMALL] local=%ld target_local=%ld driver_abs=%ld delta=%ld window=%u; measured position inside app window, NO FD sent\r\n",
+                local,local,destination,delta,(unsigned)app_window_pulses);
+            return 1;
+        }
+    }
     /* APP20 already accepts a stable measured pose in this window. In the
      * captured trace, repeating the completed target returned near actual
      * position instead of the nominal pulse target. Avoid redundant commands
@@ -509,6 +599,7 @@ static int move_to(long local)
     b[6]=(unsigned char)(count>>24);b[7]=(unsigned char)(count>>16);
     b[8]=(unsigned char)(count>>8);b[9]=(unsigned char)count;
     if(!tx(b,sizeof(b))){halt("position TX failed");return 0;}
+    move_delta_pulses=delta;
     target=destination; moving=1;motor_access=1;arrival_count=0;target_confirmed=0;
     move_tick=HAL_GetTick();poll_tick=move_tick;poll_flags=0;trace_index=0;idle_stable_count=0;
     distance=(uint32_t)(delta<0?-delta:delta);
@@ -522,7 +613,7 @@ static void lift_poll(unsigned long now)
     if(!moving)return;
     if(now-move_tick>=move_timeout){halt("lift motion timeout");return;}
     if(target_confirmed&&arrival_count>=3&&fresh()&&(flags&1)&&!(flags&12)&&flag_tick-move_tick<0x80000000UL&&
-       (app_window_pulses?(now-stable_tick>=200UL):!!(flags&2))){
+       (app_window_pulses?(now-stable_tick>=(unsigned long)tune_stable):!!(flags&2))){
         moving=0;say("[LIFT_DONE] local=%ld target_local=%ld acceptance=%s driver_arrived=%u; driver target verified\r\n",
             position-origin,target-origin,app_window_pulses?"APP_STABLE":"STRICT",!!(flags&2));
     }
@@ -536,14 +627,24 @@ static void servo_poll(unsigned long now)
         if(servo_on[i]&&servo[i]!=goal[i]){
             unsigned short diff=servo[i]<goal[i]?goal[i]-servo[i]:servo[i]-goal[i];
             unsigned long step;
+            if(servo_smooth==1||(servo_smooth>=2&&(i==1||(servo_smooth==3&&i==2)))){
+                if(!servo_profile_active[i]||servo_profile_goal[i]!=goal[i]){
+                    servo_profile_active[i]=1;servo_profile_goal[i]=goal[i];servo_profile_start[i]=servo[i];servo_profile_tick[i]=now;
+                    servo_profile_duration[i]=(unsigned long)(1875.0f*diff/servo_rate[i]+.999f);if(servo_profile_duration[i]<20)servo_profile_duration[i]=20;
+                }
+                float q=(float)(now-servo_profile_tick[i])/servo_profile_duration[i];if(q>1)q=1;
+                float h=q*q*q*(10+q*(-15+6*q));
+                servo[i]=(unsigned short)(servo_profile_start[i]+((float)goal[i]-servo_profile_start[i])*h+.5f);
+            }else{
             servo_credit[i]+=(uint32_t)servo_rate[i]*elapsed;
             step=servo_credit[i]/1000U;servo_credit[i]%=1000U;
             if(step>diff)step=diff;
             if(!step)continue;
             if(servo[i]<goal[i])servo[i]+=(unsigned short)step;else servo[i]-=(unsigned short)step;
+            }
             __HAL_TIM_SET_COMPARE(&htim3,channels[i],servo[i]);
-            if(servo[i]==goal[i])say("[SERVO_DONE] %d %u us; actual angle not sensed\r\n",i+1,servo[i]);
-        }else servo_credit[i]=0;
+            if(servo[i]==goal[i]){servo_done_tick[i]=now;say("[SERVO_DONE] %d %u us; actual angle not sensed\r\n",i+1,servo[i]);}
+        }else {servo_credit[i]=0;servo_profile_active[i]=0;}
     }
 }
 static void accept_packet(void)
@@ -594,9 +695,28 @@ static void accept_packet(void)
                  * quantization; the final arrival window remains independent. */
                 int64_t quantization=32768+(int64_t)pulses_per_rev;
                 if(error<-quantization||error>quantization){
-                    say("[TARGET_MISMATCH] commanded=%ld read_raw=%c%lu; no valid target confirmation\r\n",target,
-                        signed_raw<0?'-':'+',(unsigned long)(signed_raw<0?-signed_raw:signed_raw));
-                    halt("driver target differs from commanded absolute target");return;
+                    /* v2.7.13: a SMALL commanded delta (<= app window) can make the
+                     * driver answer 0x33 with its previous target while the lift is
+                     * physically already at the requested pose. Accept only in that
+                     * case, and only when the MEASURED encoder is inside the
+                     * commanded target's application window. A real large move keeps
+                     * the original strict mismatch halt below (fault analysis F1). */
+                    bool small_accept=false;
+                    if(app_window_pulses&&labs(move_delta_pulses)<=(long)app_window_pulses&&pos_valid&&HAL_GetTick()-pos_tick<1000UL){
+                        int64_t e=position_raw*(int64_t)pulses_per_rev-(int64_t)target*65536;
+                        int64_t w=(int64_t)app_window_pulses*65536;
+                        small_accept=(e>=-w&&e<=w);
+                    }
+                    if(small_accept){
+                        target_confirmed=1;
+                        say("[LIFT_SMALL_ACCEPT] commanded=%ld read_raw=%c%lu pos_local=%ld delta=%ld window=%u; measured position inside target app window, no halt\r\n",
+                            target,signed_raw<0?'-':'+',(unsigned long)(signed_raw<0?-signed_raw:signed_raw),
+                            position-origin,move_delta_pulses,(unsigned)app_window_pulses);
+                    }else{
+                        say("[TARGET_MISMATCH] commanded=%ld read_raw=%c%lu; no valid target confirmation\r\n",target,
+                            signed_raw<0?'-':'+',(unsigned long)(signed_raw<0?-signed_raw:signed_raw));
+                        halt("driver target differs from commanded absolute target");return;
+                    }
                 }
                 target_confirmed=1;
             }
@@ -677,17 +797,18 @@ static void motor_byte(unsigned char b)
 }
 static void status(void)
 {
-    say("[STATUS] " VERSION " clock=%lu pwm=50Hz channels=%u%u%u0 servo=%u,%u target=%u,%u\r\n",
-        HAL_RCC_GetSysClockFreq(),servo_on[0],servo_on[1],servo_on[2],servo[0],servo[1],goal[0],goal[1]);
+    say("[STATUS] " VERSION " clock=%lu pwm=50Hz channels=%u%u%u%u servo=%u,%u target=%u,%u\r\n",
+        HAL_RCC_GetSysClockFreq(),servo_on[0],servo_on[1],servo_on[2],servo_on[3],servo[0],servo[1],goal[0],goal[1]);
     say("[TRAY] enabled=%u servo=%u target=%u rate=%u us/s range=550..2350; PC8, no position sensor\r\n",
         servo_on[2],servo[2],goal[2],servo_rate[2]);
+    say("[CAMERA_SERVO] enabled=%u pwm=%u target=%u rate=%u; PC9, UNCALIBRATED endpoints\r\n",servo_on[3],servo[3],goal[3],servo_rate[3]);
     say("[JAW] enabled=%u working=%u..%u allowed=%u..%u us; PC6\r\n",servo_on[0],jaw_low,jaw_high,smin[0],smax[0]);
     say("[LIFT5] conf=%u pos_valid=%u flag_valid=%u enabled=%u ref=%u local=%ld limits=%ld..%ld moving=%u fault=%u pending=%02X\r\n",
         config_valid,pos_valid,flags_valid,!!(flags&1),referenced,referenced?position-origin:0,low_limit,high_limit,moving,fault,pending);
     say("[TASK] active=%u step=%u taught=%02X; NO gripper contact sensor\r\n",task_active,task_step,taught_mask);
     say("[GRAB] ready=%u preparing=%u active=%u step=%u slot=%u; pick=%ld clearance=%ld drop=%ld valid=%u%u; jaw=1560/1850 turn=1000/2130\r\n",
         grab_ready,grab_preparing,grab_active,grab_step,grab_slot,grab_height[0],clearance_height,grab_height[1],!!(grab_height_mask&1),!!(grab_height_mask&2));
-    say("[WORK] active=%u kind=%s step=%u points=%02X; mode=%s\r\n",work_active,work_kind==1?"rough":"stack",work_step,point_mask,motion_mode==1?"fast":(motion_mode==2?"slow":"normal"));
+    say("[WORK] active=%u kind=%s step=%u points=%02X; mode=%s\r\n",work_active,work_kind==4?"unrough":work_kind==1?"rough":"stack",work_step,point_mask,motion_mode==1?"fast":(motion_mode==2?"slow":"normal"));
     say("[MODEL] mode=ABS rpm=%u window_ddeg=%u target_ok=%u target_read=%u perr_read=%u perr_pulses=%ld turn_bounds=%u..%u rate=%u,%u us/s\r\n",
         lift_rpm,arrival_window_ddeg,target_confirmed,driver_target_valid,driver_error_valid,
         (long)(driver_error_raw*(int64_t)pulses_per_rev/65536),turn_low,turn_high,servo_rate[0],servo_rate[1]);
@@ -724,6 +845,7 @@ static void command(char *text)
     if(task_active||grab_active||grab_preparing||work_active||moving){say("[E] task/lift active; only p/status/stop\r\n");return;}
     if(datum_capture){say("[E] datum capture pending; wait for DATUM_SET\r\n");return;}
     if(!strcmp(v[0],"?")||!strcmp(v[0],"help")){
+        say("[HELP] R9E: servo4 camera PC9 (seed known pose); point view/qr; height view/qr (marked only); unrough [slot] rough->tray reverse\r\n");
         say("[HELP] p status probe r flags tpos perr pid current voltage enable stop | seed ID CURRENT_US | servo ID US | j ID DELTA | off ID\r\n");
         say("[HELP] measure on | measure mark pick/clearance/drop | measure list | measure hold | disable (=measure on); support lift before torque release\r\n");
         say("[HELP] grab [1/2/3] (default2): auto query/reference/PWM/cycle; FIRST start must be physical datum0, empty jaw; lift to stored clearance before turn\r\n");
@@ -731,8 +853,8 @@ static void command(char *text)
         say("[HELP] grab align pick/drop (capture one correct pose, shift BOTH old contacts) | point grabpick/grabdrop (independent capture)\r\n");
         say("[HELP] datum new (keep heights, change zero) | datum new fresh (clear heights) | datum at zero/clearance/tray/rough/stack/grabpick/grabdrop | point clearance\r\n");
         say("[HELP] zero limits MIN MAX jog DELTA lift LOCAL | teach open/close/pick/place/low/high/drop | task\r\n");
-        say("[HELP] speed RPM(1..5000) | accel 1..255 | rate ID US_PER_SEC(5..2000) | jawlimits MIN MAX | turnlimits MIN MAX | arrival strict/app PULSES | trace on/off\r\n");
-        say("[HELP] servo IDs:1 jaw PC6,2 turn PC7(870..2500us),3 tray PC8(550..2350us); seed output is immediate, ramp commands wait for other servos\r\n");return;
+        say("[HELP] speed RPM(1..5000) | accel 1..255 | rate ID US_PER_SEC(5..5000) | jawlimits MIN MAX | turnlimits MIN MAX | arrival strict/app PULSES | trace on/off\r\n");
+        say("[HELP] servo IDs:1 jaw PC6,2 turn PC7(870..2500us),3 tray PC8(550..2350us),4 camera PC9(500..2500us); seed output is immediate, ramp commands wait for other servos\r\n");return;
     }
     if(!strcmp(v[0],"points")){points_print();return;}
     if(!strcmp(v[0],"grab")&&argc==3&&!strcmp(v[1],"align")){
@@ -741,6 +863,12 @@ static void command(char *text)
            (!referenced&&!(measure_state==MEAS_FREE&&measure_keep_ref)))goto blocked;
         grab_height_capture=(unsigned char)i;
         if(!pending)query(0x36,0);else say("[GRAB_ALIGN_WAIT] capturing next fresh position\r\n");return;
+    }
+    if(!strcmp(v[0],"recover")){
+        if(argc!=2||(strcmp(v[1],"clearance")&&strcmp(v[1],"zero")))goto syntax;
+        if(pending||probe_active||servo_busy()||measure_state||!fresh()||!config_valid||!(flags&1U)||(flags&12U)||idle_stable_count<3||HAL_GetTick()-idle_stable_tick<200UL)goto blocked;
+        origin=position-(!strcmp(v[1],"zero")?0:clearance_height);referenced=1;fault=0;target_confirmed=0;grab_ready=0;taught_mask=0;low_limit=profile_low();high_limit=profile_high();
+        say("[REF_RECOVERED] operator confirms PHYSICAL %s; heights retained; no enable/zero/travel\r\n",v[1]);return;
     }
     if(!strcmp(v[0],"datum")){
         if(argc==1){points_print();return;}
@@ -778,9 +906,17 @@ static void command(char *text)
         origin=cal_saved_origin;referenced=1;grab_ready=0;low_limit=profile_low();high_limit=profile_high();
         say("[DATUM_USED] origin=%ld; operator confirms SAME Emm counter session; no move\r\n",origin);return;
     }
+    if(!strcmp(v[0],"height")){
+        if(argc!=2)goto syntax;
+        for(i=0;i<2;i++)if(!strcmp(v[1],camera_names[i]))break;
+        if(i==2)goto syntax;
+        if(!(camera_mask&(1U<<i))){say("[E] camera height unmarked; point view/qr then save; route unaffected\r\n");return;}
+        if(!lift_ready()||pending||probe_active||servo_busy())goto blocked;
+        if(!move_to(camera_height[i]))goto blocked;return;
+    }
     if(!strcmp(v[0],"point")){
         if(argc!=2)goto syntax;
-        if(!strcmp(v[1],"grabpick"))i=4;else if(!strcmp(v[1],"grabdrop"))i=5;else if(!strcmp(v[1],"clearance"))i=6;
+        if(!strcmp(v[1],"view"))i=7;else if(!strcmp(v[1],"qr"))i=8;else if(!strcmp(v[1],"grabpick"))i=4;else if(!strcmp(v[1],"grabdrop"))i=5;else if(!strcmp(v[1],"clearance"))i=6;
         else {for(i=0;i<4;i++)if(!strcmp(v[1],point_names[i]))break;if(i==4)goto syntax;}
         if(probe_active||servo_busy()||fault||!config_valid||
            (!referenced&&!(measure_state==MEAS_FREE&&measure_keep_ref)))goto blocked;
@@ -802,20 +938,33 @@ static void command(char *text)
             say("[SAVE_CONFIG] heights only; previous counter datum retained as history; physical reference remains UNKNOWN\r\n");
         cal_save_now();return;
     }
+    if(!strcmp(v[0],"tuning")){
+        long c=0;
+        if(servo_busy()||probe_active||fault||measure_state)goto blocked;
+        if(argc==4&&!strcmp(v[1],"lift")&&number(v[2],&a)&&number(v[3],&b)&&a>=20&&a<=900&&b>=20&&b<=600){tune_lift=a;tune_accel=b;}
+        else if(argc==5&&!strcmp(v[1],"servo")&&number(v[2],&a)&&number(v[3],&b)&&number(v[4],&c)&&a>=200&&a<=8000&&b>=200&&b<=8000&&c>=200&&c<=8000){tune_jaw=a;tune_turn=b;tune_tray=c;}
+        else if(argc==4&&!strcmp(v[1],"timing")&&number(v[2],&a)&&number(v[3],&b)&&a>=30&&a<=100&&b>=40&&b<=200){tune_poll=a;tune_dwell=b;}
+        else if(argc==3&&!strcmp(v[1],"settle")&&number(v[2],&a)&&a>=100&&a<=400){tune_turn_settle=a;}
+        else if(argc==3&&!strcmp(v[1],"shape")&&number(v[2],&a)&&a>=0&&a<=3){servo_smooth=(unsigned char)a;memset(servo_profile_active,0,sizeof servo_profile_active);}
+        else if(argc==3&&!strcmp(v[1],"compact")&&number(v[2],&a)&&a>=0&&a<=1){compact_work=(unsigned char)a;}
+        else if(argc==4&&!strcmp(v[1],"arrival")&&number(v[2],&a)&&number(v[3],&b)&&a>=100&&a<=300&&b>=1&&b<=10){tune_stable=a;tune_spread=b;}
+        else goto syntax;
+        motion_apply();say("[TUNING] lift=%u accel=%u servo=%u,%u,%u poll=%u dwell=%u; RAM only\r\n",tune_lift,tune_accel,tune_jaw,tune_turn,tune_tray,tune_poll,tune_dwell);return;
+    }
     if(!strcmp(v[0],"motion")){
         if(argc!=2||servo_busy()||probe_active)goto blocked;
         if(!strcmp(v[1],"fast"))motion_mode=1;else if(!strcmp(v[1],"normal"))motion_mode=0;
         else if(!strcmp(v[1],"slow"))motion_mode=2;else goto syntax;
         motion_apply();cal_stored=0;points_print();return;
     }
-    if((!strcmp(v[0],"grab")&&!(argc==2&&!strcmp(v[1],"setup")))||!strcmp(v[0],"rough")||!strcmp(v[0],"stack")||!strcmp(v[0],"cal")){
+    if((!strcmp(v[0],"grab")&&!(argc==2&&!strcmp(v[1],"setup")))||!strcmp(v[0],"rough")||!strcmp(v[0],"unrough")||!strcmp(v[0],"stack")||!strcmp(v[0],"cal")){
         a=2;if(argc==2){if(!number(v[1],&a))goto syntax;}else if(argc!=1)goto syntax;
         if(a<1||a>3)goto syntax;
-        b=!strcmp(v[0],"rough")?1:(!strcmp(v[0],"stack")?2:(!strcmp(v[0],"cal")?3:0));
+        b=!strcmp(v[0],"unrough")?4:!strcmp(v[0],"rough")?1:(!strcmp(v[0],"stack")?2:(!strcmp(v[0],"cal")?3:0));
         if(b==0&&grab_height_mask!=3){
             say("[E] grab contacts use an old datum; align one correct pose with grab align pick/drop, then save; rough/stack still available\r\n");return;
         }
-        if(b&&b<3&&(!(point_mask&1U)||!(point_mask&(1U<<b)))){
+        if(b!=3&&b&&(!(point_mask&1U)||!(point_mask&(1U<<(b==4?1:b))))){
             say("[E] %s height missing; teach point tray and point %s first\r\n",v[0],v[0]);return;
         }
         if(fault){say("[E] grab: stopped/faulted (%s); restore clearance with measure on/hold before restarting\r\n",last_stop_reason);return;}
@@ -909,7 +1058,7 @@ grab_blocked:
     if(!strcmp(v[0],"probe")){
         if(argc!=1||pending||probe_active||servo_busy())goto blocked;
         pos_valid=0;flags_valid=0;config_valid=0;referenced=0;taught_mask=0;grab_ready=0;driver_target_valid=driver_error_valid=target_confirmed=0;
-        probe_index=0;probe_active=1;probe_tick=HAL_GetTick()-300UL;
+    probe_index=0;probe_active=1;probe_tick=HAL_GetTick()-300UL;
         say("[PROBE] seven READ queries including target/error, no motion\r\n");return;
     }
     if(!strcmp(v[0],"r")||!strcmp(v[0],"flags")||!strcmp(v[0],"tpos")||!strcmp(v[0],"perr")||!strcmp(v[0],"pid")||!strcmp(v[0],"current")||!strcmp(v[0],"voltage")){
@@ -936,7 +1085,7 @@ grab_blocked:
     }
     if(!strcmp(v[0],"rate")){
         if(argc!=3||!number(v[1],&a)||!number(v[2],&b)||a<1||a>SERVO_COUNT)goto syntax;
-        if(b<5||b>2000||servo_busy()||probe_active)goto blocked;
+        if(b<5||b>5000||servo_busy()||probe_active)goto blocked;
         servo_rate[a-1]=(unsigned short)b;servo_credit[a-1]=0;
         say("[RATE] servo%ld=%ld us/s; no move\r\n",a,b);return;
     }
@@ -1048,6 +1197,8 @@ static void task_poll(unsigned long now)
         if(task_step>=11){task_active=0;say("[TASK] sequence finished; ACTUAL grasp/release must be observed\r\n");}
     }
 }
+static unsigned char turn_physically_settled(unsigned long now)
+{return !servo_on[1]||!servo_done_tick[1]||now-servo_done_tick[1]>=tune_turn_settle;}
 static void grab_poll(unsigned long now)
 {
     /* First raise before any turn/tray change. All PWM ramps and lift sensor
@@ -1081,9 +1232,9 @@ static void grab_poll(unsigned long now)
             }
         }
         grab_issued=1;grab_settling=0;
-    }else if(!moving&&!servo_busy()){
+    }else if(!moving&&!servo_busy()&&turn_physically_settled(now)){
         if(!grab_settling){grab_settling=1;grab_settle_tick=now;}
-        unsigned short wait=motion_mode==1?((grab_step==5||grab_step==9)?200:80):dwell[grab_step];
+        unsigned short wait=motion_mode==1?((grab_step==5||grab_step==9)?200:tune_dwell):dwell[grab_step];
         if(now-grab_settle_tick>=wait){
             if(motion_mode==1&&grab_step==1)grab_step=4;else grab_step++;
             grab_issued=grab_settling=0;
@@ -1100,8 +1251,13 @@ static void grab_begin(void)
     }
     if(requested_job){
         work_kind=requested_job;work_active=1;work_step=work_issued=work_settling=0;
+        if(compact_work&&motion_mode==1&&lift_ready()&&!moving&&!pending&&labs(position-origin-clearance_height)<=20&&
+           servo_on[0]&&servo_on[1]&&servo_on[2]&&servo[0]==1850&&goal[0]==1850&&
+           servo[1]==(work_kind==4?2130:1000)&&goal[1]==servo[1]&&servo[2]==grab_tray[grab_slot-1]&&goal[2]==servo[2]&&turn_physically_settled(HAL_GetTick())){
+            work_step=2;say("[WORK_COMPACT] verified clearance/open/source turn/tray; skip two redundant preparation steps\r\n");
+        }
         say("[WORK_START] %s slot=%u tray_pick=%ld destination=%ld; base positions chassis-aligned\r\n",
-            work_kind==1?"rough":"stack",grab_slot,point_height[0],point_height[work_kind]);return;
+            work_kind==4?"unrough":work_kind==1?"rough":"stack",grab_slot,point_height[0],point_height[work_kind==4?1:work_kind]);return;
     }
     grab_active=1;
     say("[GRAB_START] slot=%u tray=%u; one pick/place cycle\r\n",grab_slot,grab_tray[grab_slot-1]);
@@ -1170,8 +1326,8 @@ static void grab_prepare_poll(unsigned long now)
         unsigned char newly_enabled=0;
         if(moving)return;
         if(!lift_ready()||position-origin < clearance_height-20||position-origin > clearance_height+20){halt("grab failed to reach clearance before PWM");return;}
-        for(i=0;i<SERVO_COUNT;i++)if(!servo_on[i]){
-            unsigned short first=i==0?1850:(i==1?(requested_job==0?2130:1000):grab_tray[grab_prepare_slot-1]);
+        for(i=0;i<3;i++)if(!servo_on[i]){
+            unsigned short first=i==0?1850:(i==1?(requested_job==0||requested_job==4?2130:1000):grab_tray[grab_prepare_slot-1]);
             servo[i]=goal[i]=first;servo_credit[i]=0;__HAL_TIM_SET_COMPARE(&htim3,channels[i],first);
             if(HAL_TIM_PWM_Start(&htim3,channels[i])!=HAL_OK){halt("grab automatic PWM start failed");return;}
             servo_on[i]=1;say("[GRAB_PWM] servo%u enabled at%u us; clearance verified\r\n",i+1,first);
@@ -1184,7 +1340,7 @@ static void grab_prepare_poll(unsigned long now)
     }
     case 8:
         if(!lift_ready()){halt("grab feedback lost before cycle");return;}
-        if(now-grab_prepare_wait_tick>=grab_prepare_delay&&idle_stable_count>=3&&now-idle_stable_tick>=200UL)grab_begin();
+        if(turn_physically_settled(now)&&now-grab_prepare_wait_tick>=grab_prepare_delay&&idle_stable_count>=3&&now-idle_stable_tick>=(compact_work&&motion_mode==1?(unsigned long)tune_stable:200UL))grab_begin();
         return;
     default:halt("grab preparation state invalid");return;
     }
@@ -1199,42 +1355,55 @@ static void work_poll(unsigned long now)
         if(pending)return;
         a=axis[work_step];value=clearance_height;
         if(work_step==1)value=grab_tray[grab_slot-1];
-        else if(work_step==2)value=point_height[0];
+        else if(work_step==2)value=point_height[work_kind==4?1:0];
         else if(work_step==3)value=1560;
-        else if(work_step==5)value=2130;
-        else if(work_step==6)value=point_height[work_kind];
+        else if(work_step==5)value=work_kind==4?1000:2130;
+        else if(work_step==6)value=point_height[work_kind==4?0:work_kind];
         else if(work_step==7)value=1850;
         if((a==1||a==2)&&(position-origin < clearance_height-20||position-origin > clearance_height+20)){halt("work rotation requires clearance");return;}
-        say("[WORK_STEP] %s %u/9 axis=%u value=%ld\r\n",work_kind==1?"rough":"stack",work_step+1,a,value);
+        say("[WORK_STEP] %s %u/9 axis=%u value=%ld\r\n",work_kind==4?"unrough":work_kind==1?"rough":"stack",work_step+1,a,value);
         if(a==3){if(!move_to(value)){halt("work lift blocked");return;}}
         else {
             goal[a]=(unsigned short)value;
-            if(work_step==1){goal[0]=1850;goal[1]=1000;}
+            if(work_step==1){goal[0]=1850;goal[1]=work_kind==4?2130:1000;}
             if(work_step==5&&motion_mode==1&&(point_mask&8)&&point_height[3]>clearance_height){
-                long approach=point_height[3]<point_height[work_kind]?point_height[3]:point_height[work_kind];
+                long destination=point_height[work_kind==4?0:work_kind];
+                long approach=point_height[3]<destination?point_height[3]:destination;
                 if(!move_to(approach)){halt("work overlap lift blocked");return;}
                 say("[PARALLEL] loaded turn outside + descend within taught swing band to%ld\r\n",approach);
             }
         }
         work_issued=1;work_settling=0;
-    }else if(!moving&&!servo_busy()){
+    }else if(!moving&&!servo_busy()&&turn_physically_settled(now)){
         if(!work_settling){work_settling=1;work_settle_tick=now;}
-        wait=(work_step==3||work_step==7)?(motion_mode==1?200:350):(motion_mode==1?80:150);
+        wait=(work_step==3||work_step==7)?(motion_mode==1?200:350):(motion_mode==1?tune_dwell:150);
         if(now-work_settle_tick>=wait){
             work_step++;work_issued=work_settling=0;
-            if(work_step>=9){work_active=0;say("[WORK_DONE] %s slot=%u; clearance, turn outside, jaw open; observe release/stack\r\n",work_kind==1?"rough":"stack",grab_slot);}
+            if(work_step>=9){work_active=0;say("[WORK_DONE] %s slot=%u; clearance, jaw open; unrough ends INSIDE; observe release/stack\r\n",work_kind==4?"unrough":work_kind==1?"rough":"stack",grab_slot);}
         }
     }
 }
-int ArmTask_Run(void)
+void ArmTask_Init(void)
 {
-    HAL_Init();
-    Board_Arm_Init();
     cal_load();
-    say("\r\n[BOOT] " VERSION " USART1 115200 8N1; UART4 Emm5; ALL PWM OFF; NO AUTO MOVE\r\n");status();
+#ifdef ARM_NAV_BUILD
+    motion_mode=1;motion_apply();
+#endif
+#ifdef ARM_NAV_BUILD
+    say("[ARM_INIT] " VERSION " shared UART4 PA0/PA1 address5; ALL FOUR PWM OFF; no automatic lift query/motion\r\n");
+#else
+    say("\r\n[BOOT] " VERSION " USART1 115200 8N1; UART4 Emm5; ALL PWM OFF; NO AUTO MOVE\r\n");
+#endif
+    status();
+#ifndef ARM_NAV_BUILD
     probe_index=0;probe_active=1;probe_tick=HAL_GetTick()-300UL;
+#endif
+#ifndef ARM_NAV_BUILD
     say("[BOOT] read-only Emm discovery; no enable/zero/move\r\n");
-    for(;;){
+#endif
+}
+void ArmTask_Tick(void)
+{
         unsigned long now;
         if(motor_rx.err||debug_rx.err){
             motor_rx.err=debug_rx.err=0;motor_rx.tail=motor_rx.head;debug_rx.tail=debug_rx.head;
@@ -1262,7 +1431,7 @@ int ArmTask_Run(void)
         lift_poll(now);
         measure_poll(now);
         cal_save_poll();
-        if((!grab_preparing||grab_preparing>=7||(grab_preparing==6&&grab_recovered_hold))&&(!measure_state||measure_state==MEAS_FREE)&&(moving||task_active||grab_active||work_active||config_valid)&&!probe_active&&!pending&&now-poll_tick>=(moving||task_active||grab_active||grab_preparing||work_active?100UL:200UL)){
+        if((!grab_preparing||grab_preparing>=7||(grab_preparing==6&&grab_recovered_hold))&&(!measure_state||measure_state==MEAS_FREE)&&(moving||task_active||grab_active||work_active||config_valid)&&!probe_active&&!pending&&now-poll_tick>=(moving||task_active||grab_active||grab_preparing||work_active?(unsigned long)tune_poll:100UL)){
             poll_tick=now;
             query(next_feedback_query(),!(moving||task_active));
         }
@@ -1270,5 +1439,9 @@ int ArmTask_Run(void)
         grab_poll(HAL_GetTick());
         grab_prepare_poll(HAL_GetTick());
         work_poll(HAL_GetTick());
-    }
+}
+int ArmTask_Run(void)
+{
+    HAL_Init();Board_Arm_Init();ArmTask_Init();
+    for(;;)ArmTask_Tick();
 }

@@ -1,5 +1,5 @@
 /* Sector7 (0x08060000..0x0807FFFF) reserved; no nav persistent writes.
- * STM32F407VET6: 512 KiB Flash / 128 KiB SRAM. 64 KiB CCM is not used. */
+ * STM32F407VET6: 512 KiB Flash / 128 KiB SRAM; pose planning uses the nine-junction graph. */
 ENTRY(Reset_Handler)
 MEMORY {
   FLASH (rx) : ORIGIN = 0x08000000, LENGTH = 384K

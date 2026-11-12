@@ -15,3 +15,5 @@ HAL/CMSIS由ST官方STM32CubeF4 V1.28.3安装包取得，HAL文件版本V1.8.5�
 机械臂应用现已归档在arm/；其来源为原机械臂本地提交8f4403b（原始溯源资料保留本地）。arm/project/Drivers包含原ST HAL/CMSIS，各层LICENSE.txt及文件头版权保留，根目录MIT不重新授权这些第三方文件。公开内容不包含原主控完整Flash备份或第三方付费工具。归档BIN/HEX包含本项目使用的上游运行代码，其相关许可同样保留在对应标签源码中。
 
 `src/nav/generated`与`src/nav/qp`保留MATLAB生成源码的原始文件头、用途/授权提示，根目录MIT不覆盖或扩大这些文件的上游授权。这里只发布可部署算法C，未发布MATLAB模型或测试数据。
+
+独立雷达板的lidar/firmware/vendor同样保留ST HAL/CMSIS许可及逐文件版权。新增lidar/tools/build.py为本项目构建入口；不随此次发布上位机及其运行数据。当前机械臂已集成在主控，旧独立机械臂发布镜像已移除；具体状态以根README为准。

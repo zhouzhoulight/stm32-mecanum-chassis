@@ -44,6 +44,25 @@ static float qp_correction(NavControl *s,unsigned axis,float error,float velocit
  if(!*ok){s->qp_fallbacks++;memset(s->active_set[axis],0,sizeof s->active_set[axis]);}
  return solution[0];
 }
+void nav_control_feedback_reset(NavControl *s)
+{
+ memset(s->integral,0,sizeof s->integral);memset(s->applied,0,sizeof s->applied);
+ memset(s->eso,0,sizeof s->eso);memset(s->active_set,0,sizeof s->active_set);
+}
+float nav_control_feedback(NavControl *s,unsigned j,float error,float velocity,float bound,float dt)
+{
+ if(j>2||s->algorithm>3||!isfinite(error)||!isfinite(velocity)||!isfinite(bound)||bound<=0||!isfinite(dt)||dt<=0||dt>.15f||!isfinite(s->b0_ratio)||s->b0_ratio<.5f||s->b0_ratio>2)return NAN;
+ float desired=-1.8f*error,er=desired-velocity;
+ if(fabsf(s->applied[j])<.95f*bound)s->integral[j]=clip(s->integral[j]+.5f*er*dt,j==2?.04f:.015f);
+ float corr=desired+.6f*er+s->integral[j];
+ if(s->algorithm==1){
+  float b0=6.25f*s->b0_ratio;
+  for(unsigned k=0;k<10;k++){float e=s->eso[j][0]-velocity;s->eso[j][0]+=(dt/10)*(b0*s->applied[j]+s->eso[j][1]-8*e);s->eso[j][1]=clip(s->eso[j][1]-(dt/10)*16*e,j==2?.5f:.2f);}
+  corr=(3*(desired-s->eso[j][0])-s->eso[j][1])/b0;
+ }else if(s->algorithm==2)corr=-CTRL_K[0]*error-CTRL_K[1]*velocity;
+ else if(s->algorithm==3){bool ok;float q=qp_correction(s,j,error,velocity,bound,&ok);if(ok)corr=q;}
+ return clip(corr,bound);
+}
 int nav_control_step(NavControl *s,const NavPose *p,float yaw,float gyro,float dt,int wheel[4])
 {
  for(unsigned k=0;k<4;k++)wheel[k]=0;
@@ -59,9 +78,48 @@ int nav_control_step(NavControl *s,const NavPose *p,float yaw,float gyro,float d
  if(remaining< -.015f)return -2;
  float c=cosf(p->yaw_rad),sn=sinf(p->yaw_rad);
  float velocity[2]={c*p->vx_mps-sn*p->vy_mps,sn*p->vx_mps+c*p->vy_mps};
+ if(s->work_move){
+  if(s->work_mode>1||!isfinite(s->work_time)||!isfinite(s->work_duration)||s->work_time<0||s->work_duration<0)return -1;
+  for(unsigned k=0;k<4;k++)if(!isfinite(s->wheel[k])||fabsf(s->wheel[k])>s->rpm+.001f)return -1;
+  /* Short indexed placement uses signed point feedback. The long-distance
+   * cruise regulator removes along-axis error by design and cannot recover
+   * a small overrun after its braking profile has reached zero. */
+  float speed=hypotf(velocity[0],velocity[1]);
+  s->cross_error=hypotf(dx-remaining*s->direction[0],dy-remaining*s->direction[1]);
+  if(s->work_mode&&!s->work_duration){
+   float vmax=.75f*s->rpm*s->rpm_mps;
+   if(!isfinite(s->work_accel)||!isfinite(s->work_jerk)||s->work_accel<.2f||s->work_accel>1.2f||s->work_jerk<.5f||s->work_jerk>8.0f)return -1;
+   s->work_duration=mx(1.875f*s->length/vmax,mx(sqrtf(5.774f*s->length/s->work_accel),cbrtf(60*s->length/s->work_jerk)));
+  }
+  bool near=hypotf(dx,dy)<.006f&&fabsf(yaw)<.00872665f&&(!s->work_mode||s->work_time>=s->work_duration);
+  if(near&&speed<.006f&&fabsf(gyro)<.0174533f){
+   memset(s->wheel,0,sizeof s->wheel);s->stable++;return s->stable>=3?1:0;
+  }
+  s->stable=0;
+  float vx=near?0:5.0f*dx-1.8f*velocity[0],vy=near?0:5.0f*dy-1.8f*velocity[1];
+  if(s->work_mode&&!near){
+   s->work_time=mn(s->work_time+dt,s->work_duration);
+   float q=s->work_time/s->work_duration,q2=q*q,q3=q2*q;
+   float h=q3*(10+q*(-15+6*q)),v=30*q2*(1-q)*(1-q)/s->work_duration;
+   float a=60*q*(1-q)*(1-2*q)/(s->work_duration*s->work_duration);
+   float ex=dx-s->direction[0]*s->length*(1-h),ey=dy-s->direction[1]*s->length*(1-h);
+   vx=s->direction[0]*s->length*(v+.14f*a)+4*ex-.6f*(velocity[0]-s->direction[0]*s->length*v);
+   vy=s->direction[1]*s->length*(v+.14f*a)+4*ey-.6f*(velocity[1]-s->direction[1]*s->length*v);
+  }
+  float vmax=s->rpm*s->rpm_mps,v=hypotf(vx,vy),factor=mn(1,vmax/mx(v,.001f));vx*=factor;vy*=factor;
+  float angular=near?0:clip(-3*yaw-.5f*gyro,.15f);
+  float bx=c*vx+sn*vy,by=(-sn*vx+c*vy)*s->scale_y,z=s->lever_m*angular;
+  float raw[4]={(bx-by-z)/s->rpm_mps,(bx+by+z)/s->rpm_mps,(bx+by-z)/s->rpm_mps,(bx-by+z)/s->rpm_mps};
+  float largest=0,change=0;for(unsigned k=0;k<4;k++)largest=mx(largest,fabsf(raw[k]));
+  factor=mn(1,(float)s->rpm/mx(largest,.001f));
+  for(unsigned k=0;k<4;k++){raw[k]*=factor;change=mx(change,fabsf(raw[k]-s->wheel[k]));}
+  factor=mn(1,240*dt/mx(change,.001f));
+  for(unsigned k=0;k<4;k++){s->wheel[k]+=(raw[k]-s->wheel[k])*factor;if(!isfinite(s->wheel[k])||fabsf(s->wheel[k])>s->rpm+.001f){memset(wheel,0,4*sizeof *wheel);return -1;}wheel[k]=(int)roundf(s->wheel[k]);}
+  return 0;
+ }
  float along=velocity[0]*s->direction[0]+velocity[1]*s->direction[1];
  float forecast=mx(s->v,mx(along,0));float effective=mx(0,remaining-.733333f*forecast-.005f);
- float accel=s->rpm>50?.10f:.06f,jerk=s->rpm>50?.30f:.18f;
+ float accel=s->work_move?.20f:(s->rpm>50?.10f:.06f),jerk=s->work_move?.60f:(s->rpm>50?.30f:.18f);
  float target=mn(s->rpm*s->rpm_mps,mn(sqrtf(2*accel*effective),mx(0,2*(remaining-.005f))));
  if(s->translation_limit>0)target=mn(target,s->translation_limit);
  float ta=clip((target-s->v)/.2f,accel);s->a+=clip(ta-s->a,jerk*dt);s->a=clip(s->a,accel);
@@ -78,15 +136,9 @@ int nav_control_step(NavControl *s,const NavPose *p,float yaw,float gyro,float d
  float error[3]={s->xy?cross[0]:0,s->xy?cross[1]:0,yaw};
  float vel[3]={velocity[0]-ff[0],velocity[1]-ff[1],gyro-ff[2]},cmd[3];
  for(unsigned j=0;j<3;j++){
-  float bound=j==2?.15f:.035f,desired=-1.8f*error[j],er=desired-vel[j];
-  if(fabsf(s->applied[j])<.95f*bound)s->integral[j]=clip(s->integral[j]+.5f*er*dt,j==2?.04f:.015f);
-  float corr=desired+.6f*er+s->integral[j];
-  if(s->algorithm==1){
-   float b0=6.25f*s->b0_ratio;
-   for(unsigned k=0;k<10;k++){float e=s->eso[j][0]-vel[j];s->eso[j][0]+=(dt/10)*(b0*s->applied[j]+s->eso[j][1]-8*e);s->eso[j][1]=clip(s->eso[j][1]-(dt/10)*16*e,j==2?.5f:.2f);}
-   corr=(3*(desired-s->eso[j][0])-s->eso[j][1])/b0;
-  }else if(s->algorithm==2)corr=-CTRL_K[0]*error[j]-CTRL_K[1]*vel[j];
-  else if(s->algorithm==3){bool ok;float q=qp_correction(s,j,error[j],vel[j],bound,&ok);if(ok)corr=q;}
+  float bound=j==2?.15f:.035f;
+  float corr=nav_control_feedback(s,j,error[j],vel[j],bound,dt);
+  if(!isfinite(corr))return -1;
   /* Hold-only has no cross-track correction, but retains along-speed feedback. */
   if(!s->xy&&j<2){float projected=vel[0]*s->direction[0]+vel[1]*s->direction[1];corr=-.6f*projected*s->direction[j];}
   cmd[j]=ff[j]+clip(corr,bound);
@@ -98,7 +150,7 @@ int nav_control_step(NavControl *s,const NavPose *p,float yaw,float gyro,float d
  /* Declared RPM is an actual wheel cap, not merely a nominal cruise value. */
  float scale=mn(1,(float)s->rpm/mx(.001f,magnitude));
  float change=0;for(unsigned i=0;i<4;i++){raw[i]*=scale;change=mx(change,fabsf(raw[i]-s->wheel[i]));}
- scale=mn(1,((s->rpm>50?30:20)*dt)/mx(.001f,change));
+ scale=mn(1,((s->work_move?80:(s->rpm>50?30:20))*dt)/mx(.001f,change));
  for(unsigned i=0;i<4;i++){
   s->wheel[i]+=scale*(raw[i]-s->wheel[i]);
   if(!isfinite(s->wheel[i])||fabsf(s->wheel[i])>s->rpm+.001f){memset(wheel,0,4*sizeof *wheel);return -1;}

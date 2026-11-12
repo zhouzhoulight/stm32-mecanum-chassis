@@ -1,9 +1,9 @@
-# F407机械臂R9D（独立固件）
+# 当前机械臂共享代码
 
-F407VET6，HSE25MHz/168MHz。当前APP/BSP/平台及HAL/CMSIS完整保留，本次仅重新编译0错误0警告，未实物重跑。此前用户已确认grab/rough/stack取放可用。
+`project/APP/arm_task.c`是当前R9E状态机，`platform/profile_store.c`负责配置；主控`src/nav/nav_arm.c`以`ARM_NAV_BUILD`方式复用它们。PC6/PC7/PC8/PC9是四路舵机；升降ID5与四轮共享主控PA0/PA1总线。
 
-构建：`powershell -ExecutionPolicy Bypass -File arm/build.ps1`，Keil ARMCC5.06，工程`project/MDK-ARM/GC1_Arm_F407_R9D.uvprojx`目标ArmBenchF407。脚本从platform同步BSP，输出根目录ArmBenchF407.bin与MDK的F407Output。发布镜像在firmware/current/。
+**整车的最新镜像是根目录firmware/current中的主控BIN/HEX，机械臂已经编入，不需要第三块板。** 旧独立R9D镜像已移除，不能用独立机械臂固件覆盖整车主控。
 
-接线/命令/物理零点恢复见[协议](docs/serial_protocol.md)，合并冲突及下一轮测试见[总交接](../docs/HANDOFF_NAV1I_20261102.md)。调试PA9/PA10，Emm5为PC10/PC11，舵机PC6/PC7/PC8。底盘固件的PA0/PA1不能套来接此独立固件。
+本目录仍保留旧独立Keil工程/平台源码和build.ps1以便参考，它不代表本次已重新验证的发布入口；其独立电机口与共享总线不同。当前可复现构建使用根目录`python scripts/build_nav.py`，本次验证范围见[总交接](../docs/HANDOFF_F407_LIDAR_20261112.md)。
 
-上电PWM关闭，不自动动作。必须保留sector7配置；Flash中的高度记录不等于驱动器跨断电物理绝对定位。新板没有原板有效标定时先标零/标高度；不要照抄历史数字。
+操作、四路舵机接线与物理参考恢复见[当前命令表](../docs/WIRING_AND_COMMANDS.md)。Flash配置不保证驱动器断电后的物理零点；seed直接启用PWM，不是读取真实角度。相机view/qr高度先标定后使用。
