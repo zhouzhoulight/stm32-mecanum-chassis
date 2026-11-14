@@ -3,6 +3,7 @@
 #include "nav/nav_control.h"
 #include "nav/nav_odom.h"
 #include "nav/nav_lidar.h"
+#include "nav/nav_lidar_map.h"
 #include "nav/nav_bus.h"
 #include "nav/nav_platform.h"
 #include "nav/nav_time.h"
@@ -20,7 +21,8 @@
 /* 0 idle;1 zero ACK / disabled stationary;2 enable ACK;3 zero ACK + stationary;
  * 4 driving;5 zero-speed settling;6 fault. No automatic multi-leg motion. */
 static unsigned phase,algorithm,ceiling;
-static bool avoid_enabled,replan_busy,route_from_lidar,replan_plan_ready;
+static bool avoid_enabled,replan_busy,route_from_lidar,replan_plan_ready,survey_route;
+static bool qr_catalog_transition;
 static unsigned detours;
 static uint32_t replan_at,latest_tick,replan_finished,replan_cycles,lidar_start_since;
 bool nav_app_replanning(void){return replan_busy&&phase==7;}
@@ -42,15 +44,16 @@ static unsigned requested_rpm;
 static uint32_t phase_at,run_at,last_control,last_log,zero_generation,enable_generation;
 static uint32_t bus_errors,imu_errors,imu_checksums,deadline,slip_since;
 static uint32_t control_max,odom_max,bus_max,loop_max,zero_ack_at;
-/* v2.7.14 distributed wheel-consistency guard (RAM only).  Field session
- * 20261105_162021: a normal mecanum sharp turn flagged a rotating subset of
- * wheels (01->04->05->08/02->03) for >500 ms and the old "any mask sustained"
- * rule stopped a healthy chassis. Only a wheel bit that persists across every
- * consecutive sample is a real single-wheel fault; ambiguous_mask alone is the
- * unidentifiable common-slip state and must not stop. */
+/* v2.7.34: consistency flags are statistical slip/model evidence, not proof of
+ * a hardware fault. Default behaviour logs and slows the route reference;
+ * explicit strict diagnostic mode retains the old stop policy. Actual driver
+ * stall/protection, feedback loss, collision and operator stop are independent. */
 static bool wheel_guard_strict;
 static uint8_t wheel_rej_bits;
 static uint32_t wheel_rej_since,wheel_amb_since,wheel_log_at;
+static uint32_t traction_at;
+static float traction_scale=1;
+float nav_app_traction_scale(void){return traction_scale;}
 static const char *reason="none";
 static const char *names[4]={"cascade","adrc","lqr","mpc"};
 /* Bound every numeric token BEFORE scanf's integer conversions. scanf does
@@ -132,13 +135,16 @@ static void report(uint32_t now)
  nav_logf("[RESPONSE] estimate_ms=%u accepted_samples=%u; provisional effective actuator model, NOT a slip/ground-position measurement\r\n",(unsigned)(o->response_s*1000),o->response_samples);
  nav_logf("[RAW] FL4=%ld FR1=%ld RL3=%ld RR2=%ld reject=%02X ambiguous=%02X R_ratio=%d\r\n",(long)o->raw[0],(long)o->raw[1],(long)o->raw[2],(long)o->raw[3],o->rejected_mask,o->ambiguous_mask,(int)o->max_R);
  nav_logf("[ODOM_MODEL] angular_disagreement=%u samples=%u wheel_null_mmps=%d; angular model/delay disagreement is not identified wheel slip\r\n",o->angular_model,o->angular_model_samples,mm(o->null_residual_mps));
+ nav_logf("[TRACTION] mode=%s reference_permille=%u; statistical wheel rejection is not a driver stall\r\n",wheel_guard_strict?"strict":"continue",(unsigned)roundf(traction_scale*1000));
 }
 void nav_app_init(uint32_t now)
 {
- avoid_enabled=replan_busy=route_from_lidar=replan_plan_ready=false;detours=0;latest_tick=now;
+ avoid_enabled=replan_busy=route_from_lidar=replan_plan_ready=survey_route=false;detours=0;latest_tick=now;
+ qr_catalog_transition=false;
  routing=preflight_only=false;memset(&route,0,sizeof route);calibrating=segmented=work_translation=false;station_stage=0;route_wait_ms=0;wait_at=now;blending=false;blend_time=0;turning=false;turn_target=turn_last_error=turn_wheel=0;turn_stable=0;phase=0;algorithm=STUDIO_ALGORITHM;ceiling=STUDIO_ROUTE_RPM;fused=STUDIO_FUSED;xy=false;preparation_disabled=false;b0_ratio=1;reason="none";
  heading_reference=0;control_max=odom_max=bus_max=loop_max=0;last_log=now;zero_ack_at=0;
  wheel_guard_strict=false;wheel_rej_bits=0;wheel_rej_since=wheel_amb_since=wheel_log_at=0;
+ traction_at=0;traction_scale=1;
  nav_odom_init();imu_init();imu_service_init();nav_bus_init(now);
  nav_log("\r\n[BOOT] " NAV_VERSION " HSE25MHz F407VE168MHz; SHARED Emm1..5; PC6..PC9 PWM OFF; boot FE all +disable WHEELS only; no auto motion\r\n");
  nav_log("help | status | origin | algorithm cascade/adrc/lqr/mpc | run forward/back/left/right mm rpm | !\r\n");
@@ -237,16 +243,24 @@ void nav_app_command(const char *input,uint32_t now)
   if(!strcmp(cmd,"mode")&&(!strcmp(arg,"base")||!strcmp(arg,"fused"))){fused=!strcmp(arg,"fused");nav_logf("[MODE] %s; both estimators remain logged\r\n",arg);return;}
   if(!strcmp(cmd,"control")&&(!strcmp(arg,"hold")||!strcmp(arg,"xy"))){xy=!strcmp(arg,"xy");nav_logf("[CONTROL] %s\r\n",arg);return;}
  }
+ if(!strcmp(line,"route smooth legacy")||!strcmp(line,"route smooth trapezoid")||!strcmp(line,"route smooth s")){
+  unsigned profile=!strcmp(line,"route smooth s")?2:!strcmp(line,"route smooth trapezoid")?1:0;
+  nav_route_smooth(profile);nav_logf("[ROUTE_SMOOTH] profile=%u; plan again; RAM only; no motion\r\n",profile);return;
+ }
+ if(!strcmp(line,"route lowyaw on")||!strcmp(line,"route lowyaw off")){
+  nav_route_lowyaw(!strcmp(line,"route lowyaw on"));nav_log("[ROUTE_LOWYAW] accepted; plan again; no motion\r\n");return;
+ }
  if(sscanf(line,"route yawgain %d %n",&a,&n)==1&&n>0&&!line[n]){if(a<0||!nav_route_yaw_gain((unsigned)a))nav_log("[E] route yawgain2000..8000\r\n");else nav_logf("[ROUTE_YAWGAIN] %d\r\n",a);return;}
  if(sscanf(line,"limit %d %n",&a,&n)==1&&n>0&&!line[n]&&(a>=5&&a<=400)){ceiling=(unsigned)a;nav_logf("[LIMIT] actual wheel cap ceiling=%u RPM; no move\r\n",ceiling);return;}
- bool sensed_request=!strncmp(line,"route sensorplan ",17);
- n=0;if(sscanf(line,sensed_request?"route sensorplan %d %n":"route plan %d %n",&a,&n)==1&&n>0&&!line[n]&&a>=25&&a<=100){
-  bool sensed=sensed_request||avoid_enabled;
+ bool sensed_request=!strncmp(line,"route sensorplan ",17),survey_request=!strncmp(line,"route surveyplan ",17);
+ n=0;if(sscanf(line,survey_request?"route surveyplan %d %n":sensed_request?"route sensorplan %d %n":"route plan %d %n",&a,&n)==1&&n>0&&!line[n]&&a>=25&&a<=100){
+  bool sensed=survey_request||sensed_request||avoid_enabled;survey_route=false;
   if(sensed&&!nav_lidar_avoid_ready(now)){route.ready=false;nav_log("[E] sensorplan needs fresh configured lidar with obstacle+memory enabled; NO motion\r\n");return;}
   const NavOdom *q=nav_odom_data();
   uint32_t cycles=nav_hw_cycles();
   nav_map_plan_start(pose()->x_m,pose()->y_m,nav_odom_heading_now());
-  bool ok=sensed?nav_route_plan_sensed(&route,(unsigned)a,q->ppm_x,q->ppm_y,q->lever_m):nav_route_plan(&route,(unsigned)a,q->ppm_x,q->ppm_y,q->lever_m);
+  bool ok=survey_request?nav_route_plan_qr(&route,(unsigned)a,q->ppm_x,q->ppm_y,q->lever_m):sensed?nav_route_plan_sensed(&route,(unsigned)a,q->ppm_x,q->ppm_y,q->lever_m):nav_route_plan(&route,(unsigned)a,q->ppm_x,q->ppm_y,q->lever_m);
+  survey_route=survey_request&&ok;
   route_from_lidar=sensed&&ok;
   cycles=nav_hw_cycles()-cycles;nav_logf("[ROUTE_PLAN_PERF] cycles=%lu; 168cycles/us on F407; no hardware measurement on a desktop build\r\n",(unsigned long)cycles);
   nav_logf("[ROUTE_PLAN] valid=%u samples=%u length_mm=%d model_ms=%lu cap=%uRPM yaw_max_mrad_s=%u; %s; NO motion\r\n",ok,route.n,mm(route.length),(unsigned long)(route.duration*1000),route.max_rpm,(unsigned)(route.yaw_limit*a*10),route.fault);return;
@@ -258,15 +272,16 @@ void nav_app_command(const char *input,uint32_t now)
  n=0;unsigned cap=0,accel=0,yawcap=0;
  if(sscanf(line,"route dynamics %u %u %u %n",&cap,&accel,&yawcap,&n)==3&&n&&!line[n]){
   if(nav_route_dynamics(cap,accel,yawcap))nav_logf("[ROUTE_DYNAMICS] cap=%uRPM accel=%umm/s2 yaw=%umrad/s; plan again, RAM only\r\n",cap,accel,yawcap);
-  else nav_log("[E] route dynamics cap50..400 accel200..1600 yaw250..1500\r\n");
+  else nav_log("[E] route dynamics cap50..400 accel200..1600 yaw250..1800\r\n");
   route.ready=false;return;
  }
  if(!strcmp(line,"wheel guard strict")||!strcmp(line,"wheel guard distributed")){
   wheel_guard_strict=!strcmp(line,"wheel guard strict");
   wheel_rej_bits=0;wheel_rej_since=0;wheel_amb_since=0;wheel_log_at=0;slip_since=0;
+  traction_at=0;traction_scale=1;
   nav_logf("[WHEEL_GUARD] mode=%s; RAM only; %s\r\n",wheel_guard_strict?"strict":"distributed",
    wheel_guard_strict?"v2.7.13 semantics: any rejected/ambiguous mask >500ms stops":
-   "v2.7.14: same-wheel rejected >500ms stops; distributed rotation/ambiguous only logged");return;
+   "statistical rejection logs +65% reference clock, recover after1s clear; hardware/feedback guards unchanged");return;
  }
  if(!strcmp(line,"map lidar")){
   if(!nav_lidar_avoid_ready(now)){nav_log("[E] map lidar needs fresh lidar with obstacle+memory enabled\r\n");return;}
@@ -296,7 +311,7 @@ void nav_app_command(const char *input,uint32_t now)
   if(algorithm==3){nav_log("[E] route MPC not released: moving-reference integration test exceeded tracking envelope; use line tests only\r\n");return;}
   if(route.map_generation!=nav_map_generation()){nav_log("[E] map/footprint changed; plan again\r\n");return;}
   if(segmented&&calibrating){nav_log("[E] select segmented OR manual calibration mode\r\n");return;}
-  route.manual=calibrating||segmented;station_stage=0;wait_at=now;detours=0;
+  route.manual=calibrating||segmented;station_stage=0;wait_at=now;detours=0;qr_catalog_transition=false;
   if(!route.ready||route.index||route.elapsed||algorithm>3||!xy||ceiling<route.max_rpm||hypotf(pose()->x_m-route.p[0].x,pose()->y_m-route.p[0].y)>.020f||fabsf(wrapped(nav_odom_heading_now()-route.p[0].h))>.0174533f){nav_log("[E] route requires new valid plan, selected controller+xy, sufficient limit, known zone1 WEST origin within20mm/1deg\r\n");return;}
   if(!nav_route_controller(&route,algorithm,b0_ratio)){nav_log("[E] route controller configuration invalid\r\n");return;}
   nav_logf("[ROUTE_CONTROLLER] %s; common trajectory/feedforward/allocator and station settler; moving feedback selected\r\n",names[algorithm]);
@@ -305,7 +320,10 @@ void nav_app_command(const char *input,uint32_t now)
   begin(0,0,route.max_rpm,now,3,0);return;
  }
  n=0;if(sscanf(line,"frame restore %d %d %d %n",&a,&b,&angle,&n)==3&&n&&!line[n]){
-  if(!imu_angle_fresh(now)||!nav_route_footprint(a*.001f,b*.001f,angle*.00001745329252f,.005f)||!nav_odom_restore_pose(a*.001f,b*.001f,angle*.00001745329252f)){nav_log("[E] frame restore requires stationary saved zone1 pose and fresh IMU\r\n");return;}
+  /* Division rounds the exact millimetre boundary2100 to the same float as
+   * the2.10m range limit. Multiplication by an inexact .001f can exceed it. */
+  float frame_x=a/1000.0f,frame_y=b/1000.0f;
+  if(!imu_angle_fresh(now)||!nav_route_footprint(frame_x,frame_y,angle*.00001745329252f,.005f)||!nav_odom_restore_pose(frame_x,frame_y,angle*.00001745329252f)){nav_log("[E] frame restore requires stationary saved zone1 pose and fresh IMU\r\n");return;}
   heading_reference=angle*.00001745329252f;nav_log("[FRAME_RESTORED] explicit saved zone1 coordinates; same physical map, no motor write\r\n");return;
  }
  n=0;if(sscanf(line,"work goto %d %d %u %n",&a,&b,&rpm,&n)==3&&n&&!line[n]){
@@ -349,6 +367,8 @@ bool nav_app_wheel_guard(uint32_t now,uint8_t rejected,uint8_t ambiguous,unsigne
   else slip_since=0;
   return false;
  }
+ if(rejected||ambiguous){traction_at=now;traction_scale=.65f;}
+ else if((uint32_t)(now-traction_at)>=1000U)traction_scale=1;
  if(rejected){
   uint8_t bits=wheel_rej_bits?(uint8_t)(wheel_rej_bits&rejected):rejected;
   if(!bits){ /* mask rotated to a disjoint subset: new window, no emergency */
@@ -356,7 +376,8 @@ bool nav_app_wheel_guard(uint32_t now,uint8_t rejected,uint8_t ambiguous,unsigne
   }else{
    wheel_rej_bits=bits;
    if(!wheel_rej_since)wheel_rej_since=now;
-   if(now-wheel_rej_since>500U){if(why)*why="persistent single-wheel inconsistency";return true;}
+   /* A roller losing traction is not an Emm stall/communications fault.
+    * Continue using the current map and reduced reference speed. */
   }
  }else{wheel_rej_bits=0;wheel_rej_since=0;}
  if(ambiguous){
@@ -368,7 +389,7 @@ bool nav_app_wheel_guard(uint32_t now,uint8_t rejected,uint8_t ambiguous,unsigne
  }else wheel_amb_since=0;
  if((rejected||ambiguous)&&now-wheel_log_at>=1000U){
   wheel_log_at=now;
-  nav_logf("[WHEEL_SLIP] rej=%02X amb=%02X pairs=%u maxR=%ld distributed; no emergency\r\n",
+  nav_logf("[WHEEL_SLIP] rej=%02X amb=%02X pairs=%u maxR=%ld distributed; no emergency; reference=650permille\r\n",
    rejected,ambiguous,pairs,(long)lroundf(max_ratio));
  }
  return false;
@@ -377,6 +398,7 @@ void nav_app_tick(uint32_t now)
 {
  latest_tick=now;
  uint32_t start=nav_hw_cycles(),t=start;nav_odom_tick(now);uint32_t elapsed=nav_hw_cycles()-t;if(elapsed>odom_max)odom_max=elapsed;
+ nav_lidar_departure(routing&&!route.station&&route.index<route.n&&route.p[route.index].s<.30f);
  imu_service_tick(now);nav_vision_tick(now);nav_lidar_tick(now,fused,(imu_data()->gyro_seen&&now-imu_data()->gyro_at<300)?imu_data()->z_mdps*.00001745329252f:NAN);
 
  if(routing&&route.waiting){route_wait_ms+=now-wait_at;}wait_at=now;
@@ -386,14 +408,18 @@ void nav_app_tick(uint32_t now)
    * here instead of declaring a data fault before the histories can rebuild.
    * Once phase4 begins, the unchanged500ms stale guard is immediate. */
   bool waiting_laser=avoid_enabled&&routing&&phase<4&&!nav_lidar_fresh(now);
-  bool hazard=!waiting_laser&&nav_lidar_hazard(now,pose());
+  bool hazard=!waiting_laser&&nav_lidar_hazard(now,pose());unsigned hazard_path=route.n;
   if(!hazard&&avoid_enabled&&routing&&phase==4&&!route.waiting){
    float speed=hypotf(pose()->vx_mps,pose()->vy_mps),look=.20f+.30f*speed+speed*speed;
    for(unsigned k=route.index;k<route.n&&route.p[k].s-route.p[route.index].s<=look;k++)
-    if(!nav_lidar_clear(route.p[k].x,route.p[k].y,route.p[k].h,.03f)){hazard=true;break;}
+    if(nav_lidar_map_frozen()?!nav_lidar_map_safe(route.p[k].x,route.p[k].y,route.p[k].h,.03f):!nav_lidar_clear(route.p[k].x,route.p[k].y,route.p[k].h,.03f)){hazard=true;hazard_path=k;break;}
   }
   if(hazard){
+   nav_logf("[HAZARD_CAUSE] class=%s sample=%u catalog_frozen=%u\r\n",hazard_path<route.n?"remaining_path":nav_lidar_hazard_cause(),hazard_path,nav_lidar_map_frozen());
+   if(hazard_path<route.n)nav_lidar_plan_blockers(route.p[hazard_path].x,route.p[hazard_path].y,route.p[hazard_path].h,.03f,true);
     nav_lidar_capture_hazard(now,pose());
+   if(survey_route&&routing){nav_app_emergency(now,"QR survey hazard/stale; stop without automatic replan");goto end;}
+   if(nav_lidar_map_frozen()){nav_app_emergency(now,"live hazard after QR catalog freeze; no automatic replan");goto end;}
    bool laser_ready=nav_lidar_avoid_ready(now),body_clear=nav_lidar_clear(pose()->x_m,pose()->y_m,pose()->yaw_rad,.005f),wheels_ready=feedback(now,true),arm_held=nav_arm_transport_held();
    nav_logf("[AVOID_GATE] laser=%u body_clear=%u wheels=%u arm_held=%u arm_fresh=%u attempts=%u; cached hold permits stop/refresh only\r\n",laser_ready,body_clear,wheels_ready,arm_held,nav_arm_transport_ready(),detours);
    if(!laser_ready)(void)nav_lidar_command("lidar status",false,now);
@@ -419,6 +445,11 @@ void nav_app_tick(uint32_t now)
   }
   if(b->velocity_done==zero_generation&&o->quiet>=3&&abs(i->z_mdps)<1000&&hypotf(pose()->vx_mps,pose()->vy_mps)<.003f&&nav_arm_transport_ready()){
    if(!replan_plan_ready){
+    if(qr_catalog_transition){
+     if(now-replan_at<1000)goto end;
+     nav_lidar_map_freeze(true);
+     nav_logf("[CATALOG_FROZEN] at=qr confirmed=%u; one planned transition; live braking retained\r\n",nav_lidar_map_count());
+    }
     replan_busy=true;uint32_t cycles=nav_hw_cycles();
     bool ok=nav_route_replan(&route,pose(),o->ppm_x,o->ppm_y,o->lever_m);
     if(ok)ok=nav_route_controller(&route,algorithm,b0_ratio);
@@ -431,9 +462,9 @@ void nav_app_tick(uint32_t now)
     replan_plan_ready=true;replan_finished=now;
     goto end; /* Finish any in-flight read and recheck FRESH arm feedback. */
    }
-   detours++;route_wait_ms+=now-replan_at;phase=4;last_control=phase_at=now;replan_plan_ready=false;
+   bool catalog=qr_catalog_transition;qr_catalog_transition=false;if(!catalog)detours++;route_wait_ms+=now-replan_at;phase=4;last_control=phase_at=now;replan_plan_ready=false;
    deadline=nav_age(now,run_at)+(uint32_t)(route.duration*2000)+30000;
-   nav_logf("[DETOUR_RESUME] attempt=%u samples=%u completed_station=%u plan_cycles=%lu; fresh transport verified; same origin; no F3/reset\r\n",detours,route.n,route.station,(unsigned long)replan_cycles);
+   nav_logf("[%s] attempt=%u samples=%u completed_station=%u plan_cycles=%lu; fresh transport verified; same origin; no F3/reset\r\n",catalog?"CATALOG_RESUME":"DETOUR_RESUME",detours,route.n,route.station,(unsigned long)replan_cycles);
   }
   goto end;
  }
@@ -520,6 +551,7 @@ void nav_app_tick(uint32_t now)
     nav_app_emergency(now,"route prediction horizon/feedback invalid");goto end;
    }
    route.response_s=o->response_s;
+   route.traction_scale=traction_scale;
    route.predict_age_ms=nav_age(now,pose()->at); /* v2.7.12 guard diagnostic */
    unsigned station=route.station;result=nav_route_step(&route,&predicted,gyro,dt,wheel);
    control.qp_fallbacks=route.tracker.qp_fallbacks;control.qp_steps=route.tracker.qp_steps;control.qp_skips=route.tracker.qp_skips;
@@ -528,6 +560,10 @@ void nav_app_tick(uint32_t now)
    if(station!=route.station&&route.waiting&&!calibrating&&!segmented)nav_logf("[ROUTE_PAUSED] station=%u; record ground error then route resume\r\n",route.station);
    if(station!=route.station&&route.waiting&&calibrating){station_stage=1;station_at=now;}
    if(station!=route.station)nav_logf("[STATION] %u %s elapsed_ms=%lu; stopped; no origin reset\r\n",route.station,nav_route_station(route.station),(unsigned long)(route.elapsed*1000));
+   if(station!=route.station&&route.station==9&&route_from_lidar&&!survey_route&&!segmented&&!calibrating&&!nav_lidar_map_frozen()){
+    zero_generation=nav_bus_velocity((int[4]){0});phase=7;replan_at=now;replan_plan_ready=false;qr_catalog_transition=true;
+    nav_log("[CATALOG_QR_WAIT] settled QR; collect1000ms then freeze confirmed obstacles and plan remaining work; no origin reset\r\n");goto end;
+   }
    if(route.waiting&&calibrating){
     if(station_stage==1&&b->velocity_done==b->velocity_requested&&o->quiet>=3){
      if(!nav_arm_turn(2130)){nav_app_emergency(now,"station outward turn blocked");goto end;}

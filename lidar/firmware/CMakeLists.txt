@@ -9,7 +9,7 @@ endif()
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
-set(APP_VERSION "LD19_BENCH_F407VE_0.3.3" CACHE STRING "firmware identity string")
+set(APP_VERSION "LD19_BENCH_F407VE_0.3.5_FRONT150" CACHE STRING "firmware identity string")
 set(PROTOCOL_VERSION 2 CACHE STRING "host protocol version")
 
 set(LINKER_SCRIPT "${CMAKE_CURRENT_SOURCE_DIR}/linker/STM32F407VE_bench.ld")
@@ -51,6 +51,7 @@ set(BSP_SOURCES
   BSP/Src/usart1.c
   BSP/Src/usart2.c
   BSP/Src/vehicle_uart.c
+  BSP/Src/vehicle_tx_queue.c
   BSP/Src/spi1.c
   BSP/Src/i2c1.c
   BSP/Src/storage_diag.c

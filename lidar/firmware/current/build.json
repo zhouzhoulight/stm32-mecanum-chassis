@@ -1,5 +1,5 @@
 {
-  "firmware_version": "LD19_BENCH_F407VE_0.3.3",
+  "firmware_version": "LD19_BENCH_F407VE_0.3.5_FRONT150",
   "protocol_version": 2,
   "hse_mhz": 25,
   "sysclk_mhz": 168,
@@ -8,30 +8,30 @@
   "artifacts": {
     "bin": {
       "file": "LD19Bench.bin",
-      "bytes": 43596,
-      "sha256": "14da43e1f33c2e6f16ef5c1b97b2a4e9724b19c8486a606ed232abcb7c1f5cfa"
+      "bytes": 44868,
+      "sha256": "4aaaa40c4c27ff7db5945e1d70298884d63e618924fc85c81d2a992953abeab9"
     },
     "hex": {
       "file": "LD19Bench.hex",
-      "bytes": 122691,
-      "sha256": "f9cb4ca546cf58d99d7d8a051778bc3d7eaccb4b6bff6b106f660eb7a6460e2a"
+      "bytes": 126262,
+      "sha256": "da4fdf73a15a467af377dcb184805cb566e6b9254507145f4faa6f12e208926c"
     }
   },
   "source_sha256": {
     "firmware/APP/Inc/app.h": "4ff351d9590fb6a5962f774b07646c99b946cf65b5bab82f308d5f8162bdfc1b",
-    "firmware/APP/Inc/app_config.h": "0b86337b9d59c6b1503af7e44c0bfe12506b6d61505896622bed04c6d3d61cb0",
+    "firmware/APP/Inc/app_config.h": "0e10df894424195ce62bbd471dcfe1977bb4c6bd2efa27ff869c9e99dcc0e795",
     "firmware/APP/Inc/bridge.h": "832be924594e71007d7035324f456302605f51f559a0ed6c297f209638aa8bf7",
-    "firmware/APP/Inc/features.h": "126cd4f6ae995aaa83525d1b2f2ced2f0a537ff5f42891d8bab7800a78650da5",
+    "firmware/APP/Inc/features.h": "4ca59426f70fe46d0c4a1878bf3e75e15668a63adcf9f524ab6016d84fc1d51c",
     "firmware/APP/Inc/ld19_parser.h": "c346d50f2cb1a620464d7652ebe55d59049e560349782e651817221f14eac560",
     "firmware/APP/Inc/motion_history.h": "0184547f0ee10bd7bd89c1a6b7649883df2c4004265b2187671e4e1c6dd36a50",
     "firmware/APP/Inc/pose_match.h": "abd087dfb5fe8f354a79ce00bc80c3496a8afa70d492558cf161452eb7cd629e",
-    "firmware/APP/Inc/protocol.h": "52a1e5249bdfa8863ae1d0cb0da7fa1a8ce1152aef0f01cf9c3ec691f350eb69",
+    "firmware/APP/Inc/protocol.h": "97cb6b819be7272a1a0aba0c126932864d91175ea47d59b2dcce3beed847f0ac",
     "firmware/APP/Inc/scan_builder.h": "910feddac204534dec172fca5d4532fc4d0bfcd4c88497b8280c7dd40cbb867f",
     "firmware/APP/Inc/shadow_localizer.h": "6d7483c5d248865a150cb023fa4a9086ba9dfc424746ad82cad0b79c748d9f0e",
     "firmware/APP/Inc/status.h": "98f6d8e1f5adf446774cd643966ad1b775a0e74db3c071aac561b6078b8b1be0",
-    "firmware/APP/Src/app.c": "df36440127308a555f2aaa1328f07c4b56be3bb52231eb3b3475258372a23e1e",
+    "firmware/APP/Src/app.c": "5ed72325667e1bc365352ac504efb301c6a4f37ce6201f26cba12ee32cef5eaa",
     "firmware/APP/Src/bridge.c": "6875318d53e3163e9748d95c808091480e8cb5ba7609a5fb926f34b74e80c6a2",
-    "firmware/APP/Src/features.c": "4a2d7f9a33b49197f901d70853c4681368869215fc231e294229e1e74d1d1622",
+    "firmware/APP/Src/features.c": "b113545b81e44e087a29c3865bec4bace90083d21e0a5b12a156eaef5fed347c",
     "firmware/APP/Src/ld19_parser.c": "7ee25b84f74b099c3241a653b31eda899eac3353796db0ba87f7f173f6612e83",
     "firmware/APP/Src/motion_history.c": "b8b7d98226cc85f0a554896e2d67da7b35bf1b66ba1cb46e770628148e47ab30",
     "firmware/APP/Src/pose_match.c": "d845b10322c818f0fa2d456c2cac3ffba9ca88c5219c2ed4e46adf18912b85f8",
@@ -46,7 +46,8 @@
     "firmware/BSP/Inc/timebase.h": "49df48ed5317562413b0fa527a12bd231057187db6d7095fef6c1039e6ea9958",
     "firmware/BSP/Inc/usart1.h": "5917b5d1f28faab0b32a737ad695bb3d7de6a1417404f09a96423ab09753f1cb",
     "firmware/BSP/Inc/usart2.h": "6a65b30eebe65bae0d83cc5e4f413b1f978f87af28140772555c6ae91ebff5e3",
-    "firmware/BSP/Inc/vehicle_uart.h": "2e0203f8ba87836427a8b2a03fbdf00c44e1982dfd249d8761475e9ee2972466",
+    "firmware/BSP/Inc/vehicle_tx_queue.h": "08f41c7640cd48bdbcb807c4bc091ca09c1075bd3c610d8dc7b279417d9d6898",
+    "firmware/BSP/Inc/vehicle_uart.h": "d827c064e6faa27f3f7114421dc738a0db4830267d981579751ecbb99870710e",
     "firmware/BSP/Src/board_clock.c": "d12a3731f705bdff9c0d03407faa34c4c359dacf909844cab350faecebc68101",
     "firmware/BSP/Src/i2c1.c": "1c89ef8891720112dd6fec18dd15ef3a97e79f7438ba994b30a67553002441d7",
     "firmware/BSP/Src/spi1.c": "c75a175820d711313a83ec3a200817382af393eff769d06374ed271a2da6c3fe",
@@ -54,9 +55,10 @@
     "firmware/BSP/Src/timebase.c": "2f36718616dd0423244216771f3c1543c32902c5505e455c122e7b575519c85f",
     "firmware/BSP/Src/usart1.c": "2c8d62dc05b963ed4f6075442e795f678b7a3d6cfde90777bed6ef7b16d7478d",
     "firmware/BSP/Src/usart2.c": "8774be9f92b37f70e20abc3e8487bdba3ca1daf546dd7bf2617af62475283c7a",
-    "firmware/BSP/Src/vehicle_uart.c": "7b0293ab9b816aac3161151008388f43fb9418935308503043b6514962ef4c6c",
+    "firmware/BSP/Src/vehicle_tx_queue.c": "c098954e7c2387180c198152e4db5db10566ba6ce5641441bbae0ee9c0ab218a",
+    "firmware/BSP/Src/vehicle_uart.c": "25e41daac4dd6bf8f6418f7e95f205edf8ce0b8e5681a7253c954b12c177c6d1",
     "firmware/cmake/arm-none-eabi.cmake": "245fb8070e9eebe3a3c97aef9d838f1a50aa3af634d8481a838987c658aee44d",
-    "firmware/CMakeLists.txt": "be187e2874beb27909f022ffe9a3f4f1992f1f5f2cec36d4185c0722f78ae54c",
+    "firmware/CMakeLists.txt": "d0f3fd3c6fcfe4ea5ef195a1e4c62f44e37258ec68b15189eeada2e832c52116",
     "firmware/Core/Inc/board_config.h": "d6da9ea69043295f911deff04697434b81f3ad6d22574920e9f89300f9e282b6",
     "firmware/Core/Inc/main.h": "2536e7d35f1aae6025879cbdcc3e16e2b12bbb5df630210130c4c6137f1a2048",
     "firmware/Core/Inc/stm32f4xx_hal_conf.h": "5e89f08e30399fb2d95fdaccef07dcc6d665536641615cca9d23486726428ea7",

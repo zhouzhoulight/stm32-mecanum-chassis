@@ -8,6 +8,7 @@
 #include "nav/nav_lidar.h"
 #include "nav/nav_platform.h"
 #include "nav/nav_control.h"
+#include "nav/nav_motion.h"
 #include <math.h>
 #include <string.h>
 #define PI 3.14159265358979323846f
@@ -17,6 +18,13 @@ static unsigned node_count;
 static uint8_t smoothing_level[NAV_MAP_NODES];
 static unsigned config_rpm=STUDIO_ROUTE_RPM;static float config_accel=STUDIO_ROUTE_ACCEL*.001f,config_yaw=STUDIO_ROUTE_YAW*.001f;
 static float yaw_gain=STUDIO_ROUTE_YAW_GAIN*.001f;
+static unsigned smooth_profile=1;static bool lowyaw_enabled=true;
+#ifdef NAV_MOTION_SIL
+static float motion_debug[5];
+void nav_motion_debug(float *out){memcpy(out,motion_debug,sizeof motion_debug);}
+#endif
+bool nav_route_smooth(unsigned p){if(p>2)return false;smooth_profile=p;return true;}
+void nav_route_lowyaw(bool enabled){lowyaw_enabled=enabled;}
 bool nav_route_yaw_gain(unsigned gain){if(gain<2000||gain>8000)return false;yaw_gain=gain*.001f;return true;}
 bool nav_route_dynamics(unsigned rpm,unsigned accel,unsigned yaw)
 {
@@ -30,6 +38,13 @@ const char *nav_route_station(unsigned n)
 }
 static float wrap(float a){return atan2f(sinf(a),cosf(a));}
 static float clip(float a,float b){return fmaxf(-b,fminf(b,a));}
+static float phase_accel(const NavRoute *r,float path){
+ if(!r->smooth_profile)return r->accel_limit;
+ float u=fmaxf(0,fminf(1,(path-.20f)/.30f));
+ /* Half acceleration leaving the dock, continuously recover the configured
+  * acceleration by500mm. Planning, feedforward and allocator share this. */
+ return r->accel_limit*(.5f+.5f*u*u*(3-2*u));
+}
 /* OBB / AABB separating axes. Expanded chassis includes explicit margin.
  * The field outline uses physical size: blue docks have zero outline margin. */
 bool nav_route_footprint(float x,float y,float h,float margin)
@@ -75,13 +90,18 @@ static bool build_route(NavRoute *r,unsigned percent,unsigned px,unsigned py,flo
 {
  memset(r,0,sizeof *r);r->fault="invalid plan arguments";
  if(percent<25||percent>100||px<5000||px>30000||py<5000||py>30000||!isfinite(lever)||lever<.1f||lever>.5f||node_count<2)return false;
- r->map_generation=nav_map_generation();
- r->response_s=.16f;r->clock_rate=1;r->percent=percent;r->lever=lever;r->rpm_mps=3200.0f/px/60;r->scale_y=(float)py/px;r->tracker.b0_ratio=1;r->max_rpm=config_rpm*percent/100;r->accel_limit=config_accel;r->yaw_limit=config_yaw;
+ r->map_generation=nav_map_generation();r->smooth_profile=smooth_profile;r->lowyaw=lowyaw_enabled;
+ r->response_s=.16f;r->clock_rate=r->traction_scale=1;r->percent=percent;r->lever=lever;r->rpm_mps=3200.0f/px/60;r->scale_y=(float)py/px;r->tracker.b0_ratio=1;r->max_rpm=config_rpm*percent/100;r->accel_limit=config_accel;r->yaw_limit=config_yaw;
+ /*100RPM grade can double its old0.45rad/s reference. The200RPM grade
+  * retains0.9rad/s:1.2rad/s failed one held development case. Geometry and
+  * station tolerances remain unchanged; no silent guard relaxation. */
+ if(r->smooth_profile)r->yaw_limit=fminf(r->yaw_limit,.9f*100/percent);
  r->p[0]=(NavRoutePoint){.x=nodes[0].x,.y=nodes[0].y,.h=nodes[0].h};r->n=1;
  memset(smoothing_level,0,sizeof smoothing_level);
  unsigned nc=node_count;
  for(unsigned e=0;e<nc-1;e++){
   if(!nav_hw_plan_service()){r->fault="planning interrupted";return false;}
+  unsigned destination=e+1;while(destination<nc&&!nodes[destination].stop)destination++;
   float l=hypotf(nodes[e+1].x-nodes[e].x,nodes[e+1].y-nodes[e].y);
   unsigned count=(unsigned)ceilf(fmaxf(l,.25f*fabsf(wrap(nodes[e+1].h-nodes[e].h)))/.004f);
   if(!count){r->fault="duplicate route node";return false;} /* geometry checked at <=~6mm, even skipped storage points */
@@ -115,12 +135,21 @@ static bool build_route(NavRoute *r,unsigned percent,unsigned px,unsigned py,flo
    /* The taught raw pick point has only ~19mm physical platter clearance.
     * Bound the final250mm approach independently of open-corridor speed;
     * never move the taught endpoint or disable the footprint guard. */
-   if((nodes[e+1].stop==1||nodes[e+1].stop==4)&&hypotf(q[0]-nodes[e+1].x,q[1]-nodes[e+1].y)<.25f)p->cap=fminf(p->cap,30.0f*percent*.01f); /* Round-5: 30 RPM creep on the last
+   if(destination<nc&&(nodes[destination].stop==1||nodes[destination].stop==4)&&hypotf(q[0]-nodes[destination].x,q[1]-nodes[destination].y)<.25f)p->cap=fminf(p->cap,30.0f*percent*.01f); /* The original250mm dock approach must cross
+    * zero-stop guide nodes; inserting a safe junction must not truncate it
+    * to a30mm final edge. Round-5:30RPM creep on the last
     * 250 mm of raw pick stops (1/4); measured-pose overshoot at 40 RPM was 16 mm,
     * which entered the raw-fixture 5 mm guard; 30 RPM gives ~9 mm. Safety-neutral
     * (slower), only the final approach zone is affected. */
    if(nodes[e+1].stop==7||nodes[e+1].stop==8)p->cap=fminf(p->cap,25.0f*percent*.01f); /* short zero-margin blue-dock approach only */
    if(p->s<.10f)p->cap=fminf(p->cap,25.0f*percent*.01f); /* continuous blue-dock departure, no stop */
+   else if(r->smooth_profile&&p->s<.22f){
+    /* Blend out of the dock creep zone over120mm of path metric. Keep the
+     * same cruise cap; remove the cap step which excited response feedforward. */
+    float u=(p->s-.10f)/.12f,h=u*u*u*(10+u*(-15+6*u));
+    float creep=25.0f*percent*.01f;
+    p->cap=fminf(p->cap,creep+fmaxf(0,p->cap-creep)*h);
+   }
   }
  }
  r->p[0].cap=r->p[1].cap;r->length=r->p[r->n-1].s;
@@ -143,10 +172,10 @@ static bool build_route(NavRoute *r,unsigned percent,unsigned px,unsigned py,flo
   * It bounds the actual finite-difference wheel acceleration using
   * (va+vb)^2 <= 2*(ua+ub), including wheel sign reversals.
   * This replaces repeated arbitrary .97 contractions. */
- const float wheel_accel=200.0f*r->accel_limit/.60f;
  for(unsigned k=1;k<r->n;k++){
   float wa[4],wb[4];wheel_coeff(r,k-1,wa);wheel_coeff(r,k,wb);
   float ds=r->p[k].s-r->p[k-1].s;
+  float wheel_accel=200*phase_accel(r,(r->p[k].s+r->p[k-1].s)*.5f)/.60f;
   for(unsigned m=0;m<4;m++){
    float d=fabsf(wb[m]-wa[m]);
    if(d>.00001f){float v=sqrtf(wheel_accel*ds/d);r->p[k-1].v=fminf(r->p[k-1].v,v);r->p[k].v=fminf(r->p[k].v,v);}
@@ -157,7 +186,9 @@ static bool build_route(NavRoute *r,unsigned percent,unsigned px,unsigned py,flo
   if(!(j&15U)&&!nav_hw_plan_service()){r->fault="planning interrupted";return false;}
   unsigned a=dir?r->n-j:j-1,b=dir?a-1:j;
   float ds=fabsf(r->p[b].s-r->p[a].s),ua=r->p[a].v;
-  float bound=ua+2*r->accel_limit*ds,wa[4],wb[4];wheel_coeff(r,a,wa);wheel_coeff(r,b,wb);
+  float acceleration=phase_accel(r,(r->p[a].s+r->p[b].s)*.5f);
+  float wheel_accel=200*acceleration/.60f;
+  float bound=ua+2*acceleration*ds,wa[4],wb[4];wheel_coeff(r,a,wa);wheel_coeff(r,b,wb);
   for(unsigned m=0;m<4;m++){
    float c=fabsf((wa[m]+wb[m])*.5f),d=fabsf(wb[m]-wa[m]);
    if(c+d>.00001f)bound=fminf(bound,(2*wheel_accel*ds+(c-d)*ua)/(c+d));
@@ -168,6 +199,7 @@ static bool build_route(NavRoute *r,unsigned percent,unsigned px,unsigned py,flo
  for(unsigned k=1;k<r->n;k++){
   float ds=r->p[k].s-r->p[k-1].s,va=r->p[k-1].v,vb=r->p[k].v;
   float dt=2*ds/fmaxf(.00001f,va+vb),wa[4],wb[4];wheel_coeff(r,k-1,wa);wheel_coeff(r,k,wb);
+  float wheel_accel=200*phase_accel(r,(r->p[k].s+r->p[k-1].s)*.5f)/.60f;
   for(unsigned m=0;m<4;m++)if(fabsf(wb[m]*vb-wa[m]*va)>wheel_accel*dt*1.002f){r->fault="wheel acceleration envelope audit failed";return false;}
  }
  for(unsigned k=1;k<r->n;k++){
@@ -228,6 +260,16 @@ bool nav_route_plan_sensed(NavRoute *r,unsigned percent,unsigned px,unsigned py,
  if(!nav_lidar_plan_begin()){r->ready=false;r->fault="planner already active";return false;}
  return finish_plan(r,plan_sensed_fixed(r,percent,px,py,lever));
 }
+bool nav_route_plan_qr(NavRoute *r,unsigned percent,unsigned px,unsigned py,float lever){
+ if(!nav_lidar_plan_begin()){r->ready=false;r->fault="planner already active";return false;}
+ bool ok=false;const char *why="invalid QR survey plan arguments";
+ if(percent>=25&&percent<=100&&px>=5000&&px<=30000&&py>=5000&&py<=30000&&isfinite(lever)&&lever>=.1f&&lever<=.5f){
+  nav_map_plan_profile(100,px);
+  if(nav_map_qr_path(nodes,&node_count,&why))ok=build_route(r,percent,px,py,lever);
+  else {memset(r,0,sizeof *r);r->fault=why;}
+ }else {memset(r,0,sizeof *r);r->fault=why;}
+ return finish_plan(r,ok);
+}
 bool nav_route_replan(NavRoute *r,const NavPose *pose,unsigned px,unsigned py,float lever){
  if(!nav_lidar_plan_begin()){r->ready=false;r->fault="planner already active";return false;}
  return finish_plan(r,replan_fixed(r,pose,px,py,lever));
@@ -252,7 +294,7 @@ int nav_route_step(NavRoute *r,const NavPose *p,float gyro,float dt,int wheel[4]
   const NavRoutePoint *q=&r->p[r->index];
   r->error_m=hypotf(q->x-p->x_m,q->y-p->y_m);r->yaw_error=wrap(q->h-p->yaw_rad);
   if(r->error_m>.025f||fabsf(r->yaw_error)>.034907f||!nav_route_footprint(p->x_m,p->y_m,p->yaw_rad,.005f)){r->fault="parked pose moved; no automatic resume";return -1;}
-  memset(r->wheel,0,sizeof r->wheel);return 0;
+  memset(r->wheel,0,sizeof r->wheel);memset(r->wheel_accel,0,sizeof r->wheel_accel);return 0;
  }
  r->elapsed+=dt;if(r->elapsed>r->duration*2+30){r->fault="route deadline";return -1;}
  while(r->index+1<r->n&&r->p[r->index+1].t<=r->time+.00001f&&(!r->p[r->index].stop||r->station==r->p[r->index].stop))r->index++;
@@ -269,6 +311,21 @@ int nav_route_step(NavRoute *r,const NavPose *p,float gyro,float dt,int wheel[4]
  float ff[3]={0};if(ds>.000001f&&!atstop){ff[0]=(r->p[b].x-r->p[a].x)/ds*speed;ff[1]=(r->p[b].y-r->p[a].y)/ds*speed;ff[2]=wrap(r->p[b].h-r->p[a].h)/ds*speed;}
  float lag_yaw=wrap(h-p->yaw_rad)*(ff[2]>=0?1.0f:-1.0f);
  float desired=fabsf(ff[2])>.05f?fmaxf(.3f,fminf(1,1-fmaxf(0,lag_yaw-.015f)/.07f)):1;
+ if(r->smooth_profile){
+  /* The same reference clock also waits for actuator-limited translation.
+   * Otherwise a gentle wheel ramp is followed by a catch-up impulse against
+   * an increasingly distant reference. Cross-track error remains controlled
+   * independently and all measured-pose / tracking guards remain active. */
+  float v=hypotf(ff[0],ff[1]);
+  if(v>.05f){
+   float lag=((x-p->x_m)*ff[0]+(y-p->y_m)*ff[1])/v;
+   desired=fminf(desired,fmaxf(.35f,1-fmaxf(0,lag-.020f)/.080f));
+  }
+ }
+ /* Statistical wheel inconsistency slows the common SE(2) reference clock.
+  * It must not distort individual wheel ratios or restart the trajectory. */
+ if(!isfinite(r->traction_scale)||r->traction_scale<.65f||r->traction_scale>1){r->fault="invalid traction speed scale";return -1;}
+ desired=fminf(desired,r->traction_scale);
  r->clock_rate+=clip(desired-r->clock_rate,2.0f*dt);
  float feed[3];
  for(unsigned k=0;k<3;k++)feed[k]=ff[k];
@@ -278,7 +335,9 @@ int nav_route_step(NavRoute *r,const NavPose *p,float gyro,float dt,int wheel[4]
   float d1[3]={ds>0?(r->p[b].x-r->p[a].x)/ds:0,ds>0?(r->p[b].y-r->p[a].y)/ds:0,ds>0?wrap(r->p[b].h-r->p[a].h)/ds:0};
   for(unsigned k=0;k<3;k++){
    float acceleration=d1[k]*accel+(d2[k]-d1[k])*speed*speed/fmaxf(.001f,(ds+ds2)*.5f);
-   feed[k]+=r->response_s*clip(acceleration,k==2?5.0f:.90f);
+   float angular_accel=5.0f;
+   if(r->smooth_profile)angular_accel=fminf(5.0f,(200*r->accel_limit/.60f)*r->rpm_mps/r->lever*.65f);
+   feed[k]+=r->response_s*clip(acceleration,k==2?angular_accel:.90f);
   }
  }
  for(unsigned k=0;k<3;k++){feed[k]=ff[k]*r->clock_rate+(feed[k]-ff[k])*r->clock_rate*r->clock_rate;ff[k]*=r->clock_rate;}
@@ -316,7 +375,7 @@ int nav_route_step(NavRoute *r,const NavPose *p,float gyro,float dt,int wheel[4]
  float c=cosf(p->yaw_rad),s=sinf(p->yaw_rad);
  float measured[3]={c*p->vx_mps-s*p->vy_mps,s*p->vx_mps+c*p->vy_mps,gyro},cmd[3];
  if(r->tracker.algorithm>3){r->fault="invalid route controller";return -1;}
- bool near=atstop&&r->error_m<.006f&&fabsf(error[2])<.00872665f;
+ bool near=atstop&&r->error_m<.006f&&fabsf(error[2])<.00872665f&&hypotf(measured[0],measured[1])<.008f&&fabsf(gyro)<.025f;
  for(unsigned k=0;k<3;k++){
   float bound=k==2?.50f:.12f;
   float correction=(k==2?yaw_gain:3.5f)*error[k]+(k==2?.50f:.25f)*(ff[k]-measured[k])+r->integral[k];
@@ -326,8 +385,27 @@ int nav_route_step(NavRoute *r,const NavPose *p,float gyro,float dt,int wheel[4]
    correction=nav_control_feedback(&r->tracker,k,-error[k],measured[k]-ff[k],bound,dt);
    if(!isfinite(correction)){r->fault="invalid route controller feedback";return -1;}
   }
+  if(k==2&&r->lowyaw&&!atstop&&fabsf(ff[2])<.02f){
+   /* A low-speed heading correction must not dominate a5RPM translation.
+    * Soft noise bands preserve continuity, not a hard on/off relay. Angular
+    * path feedforward remains independent for deliberate blended turns. */
+   float blend=fmaxf(0,fminf(1,(hypotf(ff[0],ff[1])-.04f)/.10f));
+   blend=blend*blend*(3-2*blend);
+   float small=fmaxf(0,fabsf(error[2])-.00174533f)*(error[2]<0?-1.f:1.f);
+   float rate=fmaxf(0,fabsf(gyro)-.00698132f)*(gyro<0?-1.f:1.f);
+   float quiet=yaw_gain*small-.50f*rate+r->integral[2];
+   correction=blend*correction+(1-blend)*quiet;
+   bound=.055f+(.50f-.055f)*blend;
+   float target=clip(correction,bound),alpha=dt/(.12f+dt);
+   r->yaw_correction+=alpha*(target-r->yaw_correction);
+   correction=r->yaw_correction;
+  }else if(k==2)r->yaw_correction=correction;
   cmd[k]=near?0:atstop?clip((k==2?4.0f:2.5f)*error[k]-.20f*measured[k],bound):feed[k]+clip(correction,bound);
  }
+#ifdef NAV_MOTION_SIL
+ motion_debug[0]=ff[2];motion_debug[1]=hypotf(ff[0],ff[1]);
+ motion_debug[2]=error[2];motion_debug[3]=cmd[2];motion_debug[4]=r->time;
+#endif
  float bx=c*cmd[0]+s*cmd[1],by=(-s*cmd[0]+c*cmd[1])*r->scale_y,z=r->lever*cmd[2];
  float raw[4]={(bx-by-z)/r->rpm_mps,(bx+by+z)/r->rpm_mps,(bx+by-z)/r->rpm_mps,(bx-by+z)/r->rpm_mps};
  /* v2.7.12 optional mitigation: while a transient predicted-footprint
@@ -338,8 +416,22 @@ int nav_route_step(NavRoute *r,const NavPose *p,float gyro,float dt,int wheel[4]
  float largest=0;for(unsigned k=0;k<4;k++)largest=fmaxf(largest,fabsf(raw[k]));
  float factor=fminf(1,r->max_rpm/fmaxf(largest,.001f)),change=0;
  for(unsigned k=0;k<4;k++){raw[k]*=factor;change=fmaxf(change,fabsf(raw[k]-r->wheel[k]));}
- float slew=fminf(1,(240.0f*r->accel_limit/.60f*dt)/fmaxf(change,.001f));
- for(unsigned k=0;k<4;k++){r->wheel[k]+=(raw[k]-r->wheel[k])*slew;wheel[k]=(int)roundf(r->wheel[k]);}
+ float wheel_limit=240.0f*phase_accel(r,r->p[a].s+fraction*ds)/.60f;
+ float slew=fminf(1,(wheel_limit*dt)/fmaxf(change,.001f));
+ for(unsigned k=0;k<4;k++){
+  if(r->smooth_profile==2){
+   NavMotion state={r->wheel[k],r->wheel_accel[k]};
+   /* Keep the gentle dock jerk ramp; a deliberate turn uses a shorter ramp
+    * so independent wheel profiles do not add excessive yaw phase lag. */
+   float turn=fminf(1,fabsf(ff[2])/.25f);
+   nav_motion_step(&state,raw[k],wheel_limit,wheel_limit/(.18f-.13f*turn),dt);
+   /* A changed request can be inside the braking distance of the profile.
+    * Absolute wheel cap is hard even in that case; record boundary accel0. */
+   r->wheel[k]=clip(state.rpm,r->max_rpm);
+   r->wheel_accel[k]=r->wheel[k]==state.rpm?state.accel:0;
+  }else{r->wheel[k]+=(raw[k]-r->wheel[k])*slew;r->wheel_accel[k]=0;}
+  wheel[k]=(int)roundf(r->wheel[k]);
+ }
  float applied[3];bx=(wheel[0]+wheel[1]+wheel[2]+wheel[3])*r->rpm_mps/4;
  by=(-wheel[0]+wheel[1]+wheel[2]-wheel[3])*r->rpm_mps/(4*r->scale_y);
  applied[0]=c*bx-s*by;applied[1]=s*bx+c*by;applied[2]=(-wheel[0]+wheel[1]-wheel[2]+wheel[3])*r->rpm_mps/(4*r->lever);

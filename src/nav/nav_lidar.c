@@ -3,14 +3,20 @@
  * shadow pose is accepted as an independent absolute measurement. */
 #include "nav/nav_lidar.h"
 #include "nav/nav_lidar_map.h"
+#include "nav/nav_lidar_geometry.h"
 #include "nav/nav_map.h"
 #include "nav/nav_odom.h"
 #include "nav/nav_platform.h"
+#include "nav/nav_lidar_policy.h"
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
 #define MAX 32U
-typedef struct {float x,y,r;uint16_t id,flags;uint8_t kind;} Hit;
+#define SEGMENT_FLAG 0x0100U
+#define SEGMENT_RECORD_BYTES 12U
+#define SEGMENT_BATCH_MAX 19U
+typedef struct {float x,y,r;uint16_t id,flags;uint8_t kind;float dx,dy;} Hit;
+typedef struct {uint16_t id;int16_t ax,ay,bx,by;uint16_t width;} Segment;
 typedef struct {NavPose p;} Sample;
 static struct {
  NavLidarSend send;uint8_t state,cmd,seq,len,got,xor,p[250],txseq;
@@ -22,8 +28,22 @@ static struct {
  uint32_t clock_attempt,clock_requests,clock_good,clock_old,clock_rtt_bad,clock_work_bad,clock_send_fail,clock_jump;
  uint32_t clock_last_rtt,clock_last_work;
  uint32_t pending_stamp,scan_at;bool have_scan,pending_valid,complete;uint32_t complete_at;
+ Segment segment[MAX];uint32_t segment_stamp,segment_scan;
+ unsigned segment_n,segment_next,segment_total;bool segment_pending,segment_valid;
+ uint32_t segment_used,segment_fallback,segment_reject;
  Sample history[32];unsigned hn;uint32_t accepted,rejected;float last_dx,last_dy;
 } l;
+static bool departure;
+static const char *hazard_cause="none";
+const char *nav_lidar_hazard_cause(void){return hazard_cause;}
+static uint32_t roi_dropped,echo_dropped;
+/* Reasons count rejected TRACKS frames separately from ignored inactive records.
+ * Keep these across world-frame resets so a post-stop query retains the cause. */
+static struct {
+ uint32_t packets,header,old_scan,batch,record,future,late,pose_wait,inactive,replaced_wait;
+ int32_t last_age_us;
+} rxdiag;
+void nav_lidar_departure(bool active){departure=active;}
 /* Static storage avoids using the small MCU stack. Retain the last plan input
  * after failure: subsequent scans must not rewrite the diagnostic evidence. */
 static struct {
@@ -47,10 +67,10 @@ static bool send(uint8_t cmd,const void *payload,unsigned n){
  uint8_t x=0;for(unsigned i=0;i<n+5;i++)x^=p[i];p[n+5]=x;
  return l.send(p,n+6);
 }
-void nav_lidar_init(NavLidarSend fn){memset(&l,0,sizeof l);memset(&plan,0,sizeof plan);memset(&hazard,0,sizeof hazard);l.send=fn;l.session=1;nav_lidar_reset();}
-void nav_lidar_reset(void){nav_lidar_map_clear();l.hn=l.an=l.n=l.nn=0;l.sync=l.acked=false;l.fuse=false;l.have_scan=false;l.complete=false;l.anchor_request=false;l.fov_seen=false;l.session++;
+void nav_lidar_init(NavLidarSend fn){memset(&l,0,sizeof l);memset(&plan,0,sizeof plan);memset(&hazard,0,sizeof hazard);memset(&rxdiag,0,sizeof rxdiag);departure=false;roi_dropped=echo_dropped=0;l.send=fn;l.session=1;nav_lidar_reset();}
+void nav_lidar_reset(void){nav_lidar_echo_reset();nav_lidar_map_clear();l.hn=l.an=l.n=l.nn=0;l.sync=l.acked=false;l.fuse=false;l.have_scan=false;l.complete=false;l.anchor_request=false;l.fov_seen=false;l.segment_pending=l.segment_valid=false;l.segment_n=0;l.session++;
  uint8_t q[5];memcpy(q,&l.session,4);q[4]=0;(void)send(0x68,q,5);}
-void nav_lidar_error(void){l.state=0;l.sync=l.acked=false;l.pending_valid=false;l.complete=false;l.bad++;}
+void nav_lidar_error(void){l.state=0;l.sync=l.acked=false;l.pending_valid=false;l.complete=false;l.segment_pending=l.segment_valid=false;l.segment_n=0;l.bad++;}
 static bool at_pose(uint32_t at,NavPose *p){
  for(unsigned i=1;i<l.hn;i++){
   const NavPose *a=&l.history[i-1].p,*b=&l.history[i].p;
@@ -82,13 +102,16 @@ static bool field_intersects(float x,float y,float radius){
  float dx=fmaxf(0,fmaxf(-.15f-x,x-2.25f)),dy=fmaxf(0,fmaxf(-.15f-y,y-2.25f));
  return dx*dx+dy*dy<=radius*radius;
 }
-static bool body_return_hazard(float bx,float by,float r,float vx,float vy){
+static bool body_return_hazard(const Hit *h,float vx,float vy){
  float horizon=.3f+hypotf(vx,vy);
  for(unsigned j=0;j<=12;j++){
-  float qx=fmaxf(fabsf(bx-vx*horizon*j/12)-.18f,0),qy=fmaxf(fabsf(by-vy*horizon*j/12)-.18f,0);
-  if(qx*qx+qy*qy<r*r)return true;
+  if(nav_lidar_capsule_box(h->x,h->y,h->dx,h->dy,h->r,vx*horizon*j/12,vy*horizon*j/12,1,0,.18f,.18f))return true;
  }
  return false;
+}
+static bool surface_in_field(const Hit *h){
+ if(!(h->flags&SEGMENT_FLAG))return field_intersects(h->x,h->y,h->r);
+ return nav_lidar_capsule_box(h->x,h->y,h->dx,h->dy,h->r,1.05f,1.05f,1,0,1.2f,1.2f);
 }
 static void geometry(uint32_t stamp){
  NavPose pose;if(!at_pose(stamp,&pose)){l.reject++;return;}
@@ -96,20 +119,41 @@ static void geometry(uint32_t stamp){
  l.n=l.nn=0;
  for(unsigned i=0;i<l.pn;i++){
   Hit h=l.pending[i];float bx,by;laser_to_body(h.x,h.y,&bx,&by);
+  float vx=h.dx,vy=l.mirror_y?-h.dy:h.dy,ec=cosf(l.eh),es=sinf(l.eh);
+  float dx=ec*vx-es*vy,dy=es*vx+ec*vy;
+  if(!nav_lidar_front150(l.ex,l.ey,&bx,&by,&dx,&dy,(h.flags&SEGMENT_FLAG)!=0)){roi_dropped++;continue;}
+  float wx=pose.x_m+c*bx-s*by,wy=pose.y_m+s*bx+c*by;
+  if(!(h.flags&SEGMENT_FLAG)&&h.kind==0){
+   bool known=false;const NavLidarMemory *map=nav_lidar_map_items();
+   for(unsigned m=0;m<nav_lidar_map_count();m++){
+    float mx=map[m].x-wx,my=map[m].y-wy;
+    if(mx*mx+my*my<.01f){known=true;break;}
+   }
+   if(!nav_lidar_echo_accept(h.id,bx,by,stamp,departure,known)){echo_dropped++;continue;}
+  }
+  Hit body=h;body.x=bx;body.y=by;body.dx=dx;body.dy=dy;
   /* A centroid inside the known body footprint is unsuitable as a world
    * landmark/map object. Keep it in LIVE collision evidence until an explicit
    * measured self mask is configured; never hide it by distance alone. */
   if(fabsf(bx)<.15f&&fabsf(by)<.15f)h.flags|=0x4000U;
   /* No guessed all-near mask. Only an explicitly measured self rectangle. */
-  if(l.self_enabled&&bx<l.self[0]&&bx>-l.self[1]&&by<l.self[2]&&by>-l.self[3])continue;
+  /* A line centroid inside the mask cannot hide endpoints outside it. */
+  float mx=(h.flags&SEGMENT_FLAG)?fabsf(dx)+h.r:0;
+  float my=(h.flags&SEGMENT_FLAG)?fabsf(dy)+h.r:0;
+  if(l.self_enabled&&bx+mx<l.self[0]&&bx-mx>-l.self[1]&&by+my<l.self[2]&&by-my>-l.self[3])continue;
   h.x=pose.x_m+c*bx-s*by;h.y=pose.y_m+s*bx+c*by;
-  if(!field_intersects(h.x,h.y,h.r)){
+  h.dx=c*dx-s*dy;h.dy=s*dx+c*dy;
+  if(!surface_in_field(&h)){
    /* A drifting global pose must NEVER suppress a body-relative collision.
     * Keep such evidence in the local braking layer, not the world map. */
-   if(!body_return_hazard(bx,by,h.r,pose.vx_mps,pose.vy_mps))continue;
+   if(!body_return_hazard(&body,pose.vx_mps,pose.vy_mps))continue;
    h.flags|=0x9000U; /* outside world ROI, retained transient local safety */
   }
-  if(h.flags&0x8000U){
+  /* The fixed fixture guard is authoritative for ALL evidence strengths.
+   * A tentative/weak fragment deep inside that same fixture must not turn
+   * into a second, inflated temporary obstacle before this association. */
+  if(!(h.flags&SEGMENT_FLAG)&&nav_map_fixture_core(h.x,h.y,.055f))h.flags|=0x2000U;
+  if((h.flags&0x8000U)&&!(h.flags&0x2000U)){
    if(l.nn<MAX)l.near_hit[l.nn++]=h;
    continue; /* transient safety evidence, never localization/route occupancy */
   }
@@ -118,14 +162,13 @@ static void geometry(uint32_t stamp){
    * These are not fitted independent circles; duplicating/expanding them
    * blocks the taught pick stop. The fixed fixture guard is unchanged.
    * Outside-core detections (including adjacent poles) stay independent. */
-  if(nav_map_fixture_core(h.x,h.y,.055f))h.flags|=0x2000U;
   l.hit[l.n++]=h;
  }
  l.last_scan=l.now;l.geometry_at=stamp;l.geometry_pose=pose;
  /* Remember confirmed compact static candidates, never lone near noise.
   * Line-like fixtures stay in live geometry, not this compact-object map. */
- for(unsigned i=0;i<l.n;i++)if(l.hit[i].kind==0&&!(l.hit[i].flags&(0x10U|0x40U|0x80U|0x2000U|0x4000U|0x8000U)))
-  nav_lidar_map_observe(l.hit[i].x,l.hit[i].y,l.hit[i].r,l.now);
+ for(unsigned i=0;i<l.n;i++)if(l.hit[i].kind==0&&!(l.hit[i].flags&(0x10U|0x40U|0x80U|0x2000U|0x4000U|0x8000U))&&!nav_map_static_covered(l.hit[i].x,l.hit[i].y,l.hit[i].r))
+  nav_lidar_map_track(l.hit[i].id,l.hit[i].x,l.hit[i].y,l.hit[i].r,l.scan,l.now);
  if(l.anchor_request){
   if(nav_odom_data()->quiet<3)return;
   l.an=0;for(unsigned i=0;i<l.n;i++)if(l.hit[i].kind==0&&!(l.hit[i].flags&0x6090)&&l.hit[i].r<=.10f)l.anchor[l.an++]=l.hit[i];
@@ -159,7 +202,46 @@ static void geometry(uint32_t stamp){
   l.geometry_pose.x_m+=l.last_dx;l.geometry_pose.y_m+=l.last_dy;
  }
 }
+static void segment_frame(void){
+ if(!l.sync||!l.acked||!l.configured)return;
+ if(l.len<11){l.segment_valid=l.segment_pending=false;l.segment_reject++;return;}
+ uint32_t stamp=u32(l.p),scan=u32(l.p+4);
+ unsigned batch=l.p[8],total=l.p[9],n=l.p[10];
+ if(l.have_scan&&(int32_t)(scan-l.scan)<=0){l.segment_reject++;return;}
+ if(!total||total>2||batch>=total||n>SEGMENT_BATCH_MAX||l.len!=11+n*SEGMENT_RECORD_BYTES){
+  l.segment_valid=l.segment_pending=false;l.segment_reject++;return;
+ }
+ if(batch==0){l.segment_stamp=stamp;l.segment_scan=scan;l.segment_n=0;l.segment_next=0;l.segment_total=total;l.segment_pending=true;l.segment_valid=false;}
+ if(!l.segment_pending||l.segment_stamp!=stamp||l.segment_scan!=scan||l.segment_next!=batch||l.segment_total!=total){
+  l.segment_valid=l.segment_pending=false;l.segment_reject++;return;
+ }
+ for(unsigned k=0;k<n;k++){
+  const uint8_t *p=l.p+11+k*SEGMENT_RECORD_BYTES;
+  Segment v={u16(p),(int16_t)u16(p+2),(int16_t)u16(p+4),(int16_t)u16(p+6),(int16_t)u16(p+8),u16(p+10)};
+  bool bad=!v.id||!v.width||v.width>4000||l.segment_n==MAX;
+  for(unsigned i=0;i<l.segment_n;i++)if(l.segment[i].id==v.id)bad=true;
+  if(bad){l.segment_pending=l.segment_valid=false;l.segment_reject++;return;}
+  l.segment[l.segment_n++]=v;
+ }
+ l.segment_next++;
+ if(l.segment_next==total){l.segment_pending=false;l.segment_valid=true;}
+}
+static bool attach_segment(Hit *h,uint32_t scan,uint32_t stamp,unsigned extent,unsigned sigma){
+ if(!l.segment_valid||scan!=l.segment_scan||stamp!=l.segment_stamp)return false;
+ for(unsigned i=0;i<l.segment_n;i++)if(l.segment[i].id==h->id){
+  const Segment *v=&l.segment[i];float ax=v->ax*.001f,ay=v->ay*.001f,bx=v->bx*.001f,by=v->by*.001f;
+  float length=hypotf(bx-ax,by-ay),x=(ax+bx)*.5f,y=(ay+by)*.5f;
+  /* Validate frame/units/identity too. A broken extension never narrows the
+   * legacy disk, nor makes a scan fresh on its own. */
+  if(length<.04f||length>extent*.001f+.004f||hypotf(ax,ay)>4.1f||hypotf(bx,by)>4.1f||
+    hypotf(x-h->x,y-h->y)>extent*.0005f+.02f)return false;
+  h->x=x;h->y=y;h->dx=(bx-ax)*.5f;h->dy=(by-ay)*.5f;
+  h->r=.025f+v->width*.001f+sigma*.003f;h->flags|=SEGMENT_FLAG;return true;
+ }
+ return false;
+}
 static void frame(void){
+ if(l.cmd==0x76){segment_frame();return;}
  if(l.cmd==0x75&&(l.len==8||l.len==12)){
   unsigned start=u16(l.p),end=u16(l.p+2);
   if(start<=36000&&end<=36000&&start!=end){l.fov_start=(uint16_t)start;l.fov_end=(uint16_t)end;l.fov_at=l.now;l.fov_seen=true;l.fov2_start=l.fov2_end=0;
@@ -179,29 +261,43 @@ static void frame(void){
  }
  if(l.cmd==0xE8&&l.len==5&&u32(l.p)==l.session&&l.p[4]==1){l.acked=true;l.ack_at=l.now;return;}
  if(l.cmd!=0x73||l.len<11||!l.sync||!l.acked||!l.configured||l.now-l.clock_at>3000)return;
+ rxdiag.packets++;
  unsigned batch=l.p[8],total=l.p[9],n=l.p[10];uint32_t scan=u32(l.p+4),t=u32(l.p);
- if(total<1||total>5||batch>=total||n>7||l.len!=11+n*32){l.reject++;return;}
- if(l.have_scan&&(int32_t)(scan-l.scan)<=0){l.reject++;return;}
- if(batch==0){l.complete=false;l.scan_at=scan;l.pending_stamp=t;l.pn=0;l.batch=0;l.total=total;l.pending_valid=true;}
- if(!l.pending_valid||l.scan_at!=scan||l.pending_stamp!=t||l.total!=total||l.batch!=batch){l.pending_valid=false;l.reject++;return;}
+ if(total<1||total>5||batch>=total||n>7||l.len!=11+n*32){rxdiag.header++;l.reject++;return;}
+ if(l.have_scan&&(int32_t)(scan-l.scan)<=0){rxdiag.old_scan++;l.reject++;return;}
+ if(batch==0){if(l.complete)rxdiag.replaced_wait++;l.complete=false;l.scan_at=scan;l.pending_stamp=t;l.pn=0;l.batch=0;l.total=total;l.pending_valid=true;}
+ if(!l.pending_valid||l.scan_at!=scan||l.pending_stamp!=t||l.total!=total||l.batch!=batch){rxdiag.batch++;l.pending_valid=false;l.reject++;return;}
  l.batch++;
  for(unsigned i=0;i<n;i++){
   const uint8_t *p=l.p+11+i*32;uint16_t flags=u16(p+30),sigma=u16(p+20),extent=u16(p+22);
+  /* A coasting track can leave the sensor range after ego-motion. It is not
+   * an observation and must not invalidate other current records in the scan.
+   * Genuine observed malformed/out-of-range records retain the original guard. */
+  if(!(flags&1)||u16(p+26)>150||sigma>40){rxdiag.inactive++;continue;}
   float x=fl(p+4)*.001f,y=fl(p+8)*.001f;
-  if(!isfinite(x)||!isfinite(y)||hypotf(x,y)>4.0f){l.pending_valid=false;l.reject++;return;}
-  if(!(flags&1)||u16(p+26)>150||sigma>40)continue;
+  if(!isfinite(x)||!isfinite(y)||hypotf(x,y)>4.0f){rxdiag.record++;l.pending_valid=false;l.reject++;return;}
+  Hit h={.x=x,.y=y,.r=.025f+extent*.0005f+sigma*.003f,.id=u16(p),.flags=(uint16_t)(flags&~SEGMENT_FLAG),.kind=p[3]};
+  if((flags&SEGMENT_FLAG)&&p[3]==2&&(flags&0x08U)){
+   if(attach_segment(&h,scan,t,extent,sigma))l.segment_used++;else l.segment_fallback++;
+  }
   bool regular=p[2]==2&&u16(p+28)>=3&&u16(p+24)>=2&&!(flags&0x40);
-  /* Near evidence does not wait for 3-5 complete scans. Two neighbouring
-   * points suffice on first observation; a lone point needs a repeated hit. */
-  bool near=hypotf(x,y)<.60f&&(u16(p+24)>=2||u16(p+28)>=2);
+  /* Test the closest part of a strip, not only its distant centroid. A new
+   * long surface whose endpoint approaches the body must brake immediately. */
+  bool near_range=hypotf(x,y)<.60f;
+  if(h.flags&SEGMENT_FLAG){
+   float reach=.60f+h.r;
+   near_range=nav_lidar_segment_box_d2(h.x-h.dx,h.y-h.dy,h.x+h.dx,h.y+h.dy,0,0)<=reach*reach;
+  }
+  bool near=near_range&&(u16(p+24)>=2||u16(p+28)>=2);
   if(!regular&&!near)continue;
-  if(!regular)flags|=0x8000U;
-  if(l.pn<MAX)l.pending[l.pn++]=(Hit){x,y,.025f+extent*.0005f+sigma*.003f,u16(p),flags,p[3]};
+  if(!regular)h.flags|=0x8000U;
+  if(l.pn<MAX)l.pending[l.pn++]=h;
  }
  if(l.batch==total){
   l.pending_valid=false;l.scan=scan;l.have_scan=true;
   int32_t age=(int32_t)(l.now*1000-(t-l.offset));
-  if(age<0||age>250000){l.reject++;return;}
+  rxdiag.last_age_us=age;
+  if(age<0||age>250000){if(age<0)rxdiag.future++;else rxdiag.late++;l.reject++;return;}
   l.complete_at=l.now-(uint32_t)age/1000;l.complete=true;
  }
 }
@@ -227,7 +323,7 @@ void nav_lidar_tick(uint32_t now,bool selected,float gyro){
  }
  if(l.complete){NavPose sample;
   if(at_pose(l.complete_at,&sample)){l.complete=false;geometry(l.complete_at);}
-  else if(now-l.complete_at>250){l.complete=false;l.reject++;}
+  else if(now-l.complete_at>250){l.complete=false;rxdiag.pose_wait++;l.reject++;}
  }
  if(now-l.time<50)return;
  l.time=now;
@@ -252,12 +348,27 @@ static bool hit_intersects(float hx,float hy,float radius,float x,float y,float 
  float qx=fmaxf(fabsf(bx)-.15f-margin,0),qy=fmaxf(fabsf(by)-.15f-margin,0);
  return qx*qx+qy*qy<radius*radius;
 }
+static bool shape_intersects(const Hit *h,float x,float y,float c,float s,float margin){
+ if(!(h->flags&SEGMENT_FLAG))return hit_intersects(h->x,h->y,h->r,x,y,c,s,margin);
+ return nav_lidar_capsule_box(h->x,h->y,h->dx,h->dy,h->r,x,y,c,s,.15f+margin,.15f+margin);
+}
 static bool hits_clear(const Hit *hit,unsigned n,float x,float y,float yaw,float margin){
  float c=cosf(yaw),s=sinf(yaw);
  for(unsigned i=0;i<n;i++){
   if(hit[i].flags&0x2000U)continue; /* still guarded by the fixed scene map */
-  if(hit_intersects(hit[i].x,hit[i].y,hit[i].r,x,y,c,s,margin))return false;
+  if(shape_intersects(&hit[i],x,y,c,s,margin))return false;
  }return true;
+}
+static bool catalog_contains(const Hit *h){
+ if(h->flags&SEGMENT_FLAG)return false;
+ const NavLidarMemory *m=nav_lidar_map_items();
+ for(unsigned i=0;i<nav_lidar_map_count();i++){
+  float allowance=m[i].r+.03f-h->r;
+  if(allowance<0)continue;
+  float dx=h->x-m[i].x,dy=h->y-m[i].y;
+  if(dx*dx+dy*dy<=allowance*allowance)return true;
+ }
+ return false;
 }
 bool nav_lidar_clear(float x,float y,float yaw,float margin){
  if(!l.obstacles)return true;
@@ -281,6 +392,9 @@ bool nav_lidar_plan_end(void){
  nav_logf("[PLAN_INPUT_END] id=%lu session_same=%u; last input retained for lidar plan live/memory\r\n",(unsigned long)plan.id,same);
  return same;
 }
+uint32_t nav_lidar_plan_token(void){
+ return plan.active&&plan.session==l.session&&plan.obstacles==l.obstacles&&plan.memory_enabled==l.memory_enabled?plan.id:0;
+}
 bool nav_lidar_plan_clear(float x,float y,float yaw,float margin){
  if(!plan.active)return nav_lidar_clear(x,y,yaw,margin);
  if(plan.session!=l.session)return false;
@@ -301,11 +415,11 @@ void nav_lidar_plan_blockers(float x,float y,float yaw,float margin,bool live){
   if(is_mem&&!memory)continue;
   if(!is_mem&&(hit[j].flags&0x2000U))continue;
   float hx=is_mem?mem[j].x:hit[j].x,hy=is_mem?mem[j].y:hit[j].y,r=is_mem?mem[j].r+.03f:hit[j].r;
-  if(!hit_intersects(hx,hy,r,x,y,c,s,margin))continue;
+  if(is_mem?!hit_intersects(hx,hy,r,x,y,c,s,margin):!shape_intersects(&hit[j],x,y,c,s,margin))continue;
   found++;
   if(shown++<4)nav_logf("[PLAN_BLOCKER] input=%lu view=%s source=%s index=%u id=%u xy_mm=%d,%d effective_r_mm=%d flags=%04X\r\n",(unsigned long)plan.id,live?"current":"frozen",is_mem?"memory":"scan",j,is_mem?0:hit[j].id,(int)roundf(hx*1000),(int)roundf(hy*1000),(int)roundf(r*1000),is_mem?0:hit[j].flags);
  }
- nav_logf("[PLAN_BLOCKERS] input=%lu view=%s target_mm=%d,%d count=%u; circles only; no automatic removal\r\n",(unsigned long)plan.id,live?"current":"frozen",(int)roundf(x*1000),(int)roundf(y*1000),found);
+ nav_logf("[PLAN_BLOCKERS] input=%lu view=%s target_mm=%d,%d count=%u; circle/capsule geometry; no automatic removal\r\n",(unsigned long)plan.id,live?"current":"frozen",(int)roundf(x*1000),(int)roundf(y*1000),found);
 }
 static void hazard_report(void){
  nav_logf("[HAZARD_INPUT] valid=%u id=%lu at_ms=%lu pose_mm=%d,%d yaw_mdeg=%d velocity_mmps=%d,%d geometry_ms=%lu scan_age=%lu clock_age=%lu live=%u near=%u memory=%u full=%u link_bits=%02X; CAPTURED at trigger, not poststop map\r\n",hazard.valid,(unsigned long)hazard.id,(unsigned long)hazard.at,(int)roundf(hazard.pose.x_m*1000),(int)roundf(hazard.pose.y_m*1000),(int)roundf(hazard.pose.yaw_rad*57295.7795f),(int)roundf(hazard.pose.vx_mps*1000),(int)roundf(hazard.pose.vy_mps*1000),(unsigned long)hazard.geometry_at,(unsigned long)hazard.scan_age,(unsigned long)hazard.clock_age,hazard.n,hazard.nn,hazard.m,hazard.full,hazard.link_flags);
@@ -330,7 +444,7 @@ void nav_lidar_capture_hazard(uint32_t now,const NavPose *pose){
   if(!memory&&(hazard.hit[k].flags&0x2000U))continue;
   float x=memory?hazard.memory[k].x:hazard.hit[k].x,y=memory?hazard.memory[k].y:hazard.hit[k].y;
   float r=memory?hazard.memory[k].r+.03f:hazard.hit[k].r;
-  if(!hit_intersects(x,y,r,pose->x_m,pose->y_m,c,s,.005f))continue;
+  if(memory?!hit_intersects(x,y,r,pose->x_m,pose->y_m,c,s,.005f):!shape_intersects(&hazard.hit[k],pose->x_m,pose->y_m,c,s,.005f))continue;
   total++;if(shown++>=4)continue;
   float dx=x-pose->x_m,dy=y-pose->y_m;
   nav_logf("[HAZARD_BODY] source=%s index=%u id=%u body_mm=%d,%d radius_mm=%d flags=%04X kind=%u\r\n",memory?"memory":"scan",k,memory?0:hazard.hit[k].id,(int)roundf((c*dx+s*dy)*1000),(int)roundf((-s*dx+c*dy)*1000),(int)roundf(r*1000),memory?0:hazard.hit[k].flags,memory?0:hazard.hit[k].kind);
@@ -343,20 +457,47 @@ bool nav_lidar_start_ready(uint32_t now,uint32_t since){
  return nav_lidar_avoid_ready(now)&&now-l.clock_at<=1000&&now-l.last_scan<=200&&(int32_t)(l.geometry_at-since)>=0;
 }
 bool nav_lidar_hazard(uint32_t now,const NavPose *p){
+ hazard_cause="none";
  if(!l.obstacles)return false;
- if(!l.configured||!l.sync||now-l.clock_at>3000||now-l.last_scan>500)return true;
+ if(!l.configured||!l.sync){hazard_cause="link_not_ready";return true;}
+ if(now-l.clock_at>3000){hazard_cause="clock_stale";return true;}
+ if(now-l.last_scan>500){hazard_cause="scan_stale";return true;}
  float bc=cosf(p->yaw_rad),bs=sinf(p->yaw_rad);
  for(unsigned i=0;i<l.nn;i++){
   float dx=l.near_hit[i].x-p->x_m,dy=l.near_hit[i].y-p->y_m;
   float bx=bc*dx+bs*dy,by=-bs*dx+bc*dy;
   /* Use velocity direction and a 300 ms reaction/braking envelope, rather
    * than stopping for every nearby object beside/behind a clear route. */
-  if(body_return_hazard(bx,by,l.near_hit[i].r,p->vx_mps,p->vy_mps))return true;
+  Hit body=l.near_hit[i];body.x=bx;body.y=by;
+  body.dx=bc*l.near_hit[i].dx+bs*l.near_hit[i].dy;
+  body.dy=-bs*l.near_hit[i].dx+bc*l.near_hit[i].dy;
+  if(body_return_hazard(&body,p->vx_mps,p->vy_mps)){hazard_cause="near_return";return true;}
  }
  float c=cosf(p->yaw_rad),s=sinf(p->yaw_rad),vx=c*p->vx_mps-s*p->vy_mps,vy=s*p->vx_mps+c*p->vy_mps;
  float speed=hypotf(vx,vy),horizon=.3f+speed/1.0f; /* provisional braking a=0.5 m/s^2 */
- for(unsigned i=0;i<=12;i++)if(!nav_lidar_clear(p->x_m+vx*horizon*i/12,p->y_m+vy*horizon*i/12,p->yaw_rad,.03f))return true;
+ uint32_t contained=0;
+ if(nav_lidar_map_frozen())for(unsigned k=0;k<l.n;k++)if((l.hit[k].flags&0x2000U)||catalog_contains(&l.hit[k]))contained|=1UL<<k;
+ for(unsigned i=0;i<=12;i++){
+  float x=p->x_m+vx*horizon*i/12,y=p->y_m+vy*horizon*i/12;
+  if(!i||!nav_lidar_map_frozen()){
+   if(!nav_lidar_clear(x,y,p->yaw_rad,.03f)){hazard_cause="braking_envelope";return true;}
+  }else{
+   /* Known immutable obstacles are checked against the actual planned path
+    * by nav_app. Extending CURRENT velocity straight beyond a planned turn
+    * invents collisions. New/uncontained observations keep this independent
+    * conservative envelope; current-body overlap above is never bypassed. */
+   for(unsigned k=0;k<l.n;k++)if(!(contained&(1UL<<k))&&shape_intersects(&l.hit[k],x,y,c,s,.03f)){
+    hazard_cause="unknown_braking_envelope";return true;
+   }
+  }
+ }
  return false;
+}
+static void surface_page(const char *view,const Hit *hit,unsigned n){
+ for(unsigned i=0;i<n;i++)if(hit[i].flags&SEGMENT_FLAG)
+  nav_logf("[LIDAR_SURFACE] view=%s id=%u a_mm=%d,%d b_mm=%d,%d radius_mm=%d; endpoints in N, radius includes uncertainty\r\n",view,hit[i].id,
+   (int)roundf((hit[i].x-hit[i].dx)*1000),(int)roundf((hit[i].y-hit[i].dy)*1000),
+   (int)roundf((hit[i].x+hit[i].dx)*1000),(int)roundf((hit[i].y+hit[i].dy)*1000),(int)roundf(hit[i].r*1000));
 }
 bool nav_lidar_command(const char *s,bool idle,uint32_t now){
  if(strncmp(s,"lidar",5))return false;
@@ -367,26 +508,37 @@ bool nav_lidar_command(const char *s,bool idle,uint32_t now){
    bool near=!strcmp(s,"lidar hazard near");const Hit *v=near?hazard.near:hazard.hit;unsigned count=near?hazard.nn:hazard.n;
    for(unsigned i=0;i<count;i++)nav_logf("[HAZARD_SCAN_ITEM] source=%s %u id=%u xy_mm=%d,%d radius_mm=%d flags=%04X kind=%u\r\n",near?"near":"scan",i,v[i].id,(int)roundf(v[i].x*1000),(int)roundf(v[i].y*1000),(int)roundf(v[i].r*1000),v[i].flags,v[i].kind);
   }
+  if(!strcmp(s,"lidar hazard live"))surface_page("hazard_live",hazard.hit,hazard.n);
+  if(!strcmp(s,"lidar hazard near"))surface_page("hazard_near",hazard.near,hazard.nn);
   if(!strcmp(s,"lidar hazard memory"))for(unsigned i=0;i<hazard.m;i++)nav_logf("[HAZARD_MEMORY_ITEM] %u xy_mm=%d,%d radius_mm=%d seen_ms=%lu hits=%u\r\n",i,(int)roundf(hazard.memory[i].x*1000),(int)roundf(hazard.memory[i].y*1000),(int)roundf(hazard.memory[i].r*1000),(unsigned long)hazard.memory[i].seen,hazard.memory[i].hits);
   return true;
  }
  if(!strcmp(s,"lidar plan")||!strcmp(s,"lidar plan live")||!strcmp(s,"lidar plan memory")){
   nav_logf("[PLAN_SNAPSHOT] valid=%u active=%u id=%lu at_ms=%lu geometry_ms=%lu session=%lu obs=%u memory_on=%u live=%u memory=%u full=%u; retained immutable input, not current map\r\n",plan.valid,plan.active,(unsigned long)plan.id,(unsigned long)plan.at,(unsigned long)plan.geometry_at,(unsigned long)plan.session,plan.obstacles,plan.memory_enabled,plan.n,plan.m,plan.full);
   if(plan.valid&&!strcmp(s,"lidar plan live"))for(unsigned i=0;i<plan.n;i++)nav_logf("[PLAN_SCAN_ITEM] %u id=%u xy_mm=%d,%d radius_mm=%d flags=%04X kind=%u\r\n",i,plan.hit[i].id,(int)roundf(plan.hit[i].x*1000),(int)roundf(plan.hit[i].y*1000),(int)roundf(plan.hit[i].r*1000),plan.hit[i].flags,plan.hit[i].kind);
+  if(plan.valid&&!strcmp(s,"lidar plan live"))surface_page("plan",plan.hit,plan.n);
   if(plan.valid&&!strcmp(s,"lidar plan memory"))for(unsigned i=0;i<plan.m;i++)nav_logf("[PLAN_MEMORY_ITEM] %u xy_mm=%d,%d radius_mm=%d seen_ms=%lu hits=%u\r\n",i,(int)roundf(plan.memory[i].x*1000),(int)roundf(plan.memory[i].y*1000),(int)roundf(plan.memory[i].r*1000),(unsigned long)plan.memory[i].seen,plan.memory[i].hits);
   return true;
  }
  if(!strcmp(s,"lidar status")){
+  nav_logf("[LIDAR_POLICY] body_front_deg=-75..75 native_install_cdeg=19500..34500 rear_window_ignored=1 departure=%u sudden_close_mm=%u roi_drop=%lu echo_drop=%lu\r\n",departure,departure?80U:50U,(unsigned long)roi_dropped,(unsigned long)echo_dropped);
+  nav_logf("[LIDAR_RX] packets=%lu inactive=%lu header=%lu old=%lu batch=%lu record=%lu future=%lu late=%lu pose_wait=%lu replaced_wait=%lu last_age_us=%ld\r\n",(unsigned long)rxdiag.packets,(unsigned long)rxdiag.inactive,(unsigned long)rxdiag.header,(unsigned long)rxdiag.old_scan,(unsigned long)rxdiag.batch,(unsigned long)rxdiag.record,(unsigned long)rxdiag.future,(unsigned long)rxdiag.late,(unsigned long)rxdiag.pose_wait,(unsigned long)rxdiag.replaced_wait,(long)rxdiag.last_age_us);
+  nav_logf("[LIDAR_SEGMENTS] used=%lu fallback_disk=%lu reject=%lu cache_complete=%u; matching scan geometry required\r\n",(unsigned long)l.segment_used,(unsigned long)l.segment_fallback,(unsigned long)l.segment_reject,l.segment_valid);
   nav_logf("[LIDAR_CLOCK] tx=%lu accepted=%lu rtt_reject=%lu work_reject=%lu old=%lu enqueue_fail=%lu jump=%lu last_rtt_ms=%lu last_work_us=%lu; quality20ms stale3000ms unchanged\r\n",(unsigned long)l.clock_requests,(unsigned long)l.clock_good,(unsigned long)l.clock_rtt_bad,(unsigned long)l.clock_work_bad,(unsigned long)l.clock_old,(unsigned long)l.clock_send_fail,(unsigned long)l.clock_jump,(unsigned long)l.clock_last_rtt,(unsigned long)l.clock_last_work);
   nav_logf("[LIDAR] cfg=%u sync=%u ack=%u obs=%u fuse=%u frames=%lu bad=%lu reject=%lu scan_age=%lu tracks=%u anchors=%u accepted=%lu rejected=%lu shift_um=%d,%d; RAM only\r\n",l.configured,l.sync,l.acked,l.obstacles,l.fuse,(unsigned long)l.frames,(unsigned long)l.bad,(unsigned long)l.reject,(unsigned long)(now-l.last_scan),l.n,l.an,(unsigned long)l.accepted,(unsigned long)l.rejected,(int)(l.last_dx*1e6f),(int)(l.last_dy*1e6f));nav_logf("[LIDAR_NEAR] temporary=%u self_mask=%u; near is safety evidence, not permanent occupancy\r\n",l.nn,l.self_enabled);nav_logf("[LIDAR_TIMING] clock_age_ms=%lu geometry_at_ms=%lu last_scan_age_ms=%lu pose_samples=%u pending=%u complete=%u\r\n",(unsigned long)(now-l.clock_at),(unsigned long)l.geometry_at,(unsigned long)(now-l.last_scan),l.hn,l.pending_valid,l.complete);nav_logf("[LIDAR_MOUNT] x_mm=%d y_mm=%d yaw_mdeg=%d mirror_y=%u; RAM only\r\n",(int)roundf(l.ex*1000),(int)roundf(l.ey*1000),(int)roundf(l.eh*57295.7795f),l.mirror_y);nav_logf("[LIDAR_FOV] known=%u native_cdeg=%u..%u age_ms=%lu; outside unobserved\r\n",l.fov_seen,l.fov_start,l.fov_end,(unsigned long)(now-l.fov_at));nav_logf("[LIDAR_REAR_WINDOW] native_cdeg=%u..%u; narrow coverage only\r\n",l.fov2_start,l.fov2_end);return true;
  }
  if(!strcmp(s,"lidar tracks")){
+  nav_logf("[LIDAR_TRACK_FRAME] query_ms=%lu geometry_ms=%lu scan_pose_mm=%d,%d yaw_mdeg=%d session=%lu; track XY is in N, not body\r\n",
+   (unsigned long)now,(unsigned long)l.geometry_at,(int)roundf(l.geometry_pose.x_m*1000),(int)roundf(l.geometry_pose.y_m*1000),
+   (int)roundf(l.geometry_pose.yaw_rad*57295.7795f),(unsigned long)l.session);
+  surface_page("live",l.hit,l.n);surface_page("near",l.near_hit,l.nn);
   for(unsigned i=0;i<l.n;i++)nav_logf("[LIDAR_TRACK] id=%u x_mm=%d y_mm=%d radius_mm=%d flags=%04X kind=%u\r\n",l.hit[i].id,(int)(l.hit[i].x*1000),(int)(l.hit[i].y*1000),(int)(l.hit[i].r*1000),l.hit[i].flags,l.hit[i].kind);
   for(unsigned i=0;i<l.nn;i++)nav_logf("[LIDAR_TEMP] id=%u x_mm=%d y_mm=%d radius_mm=%d flags=%04X\r\n",l.near_hit[i].id,(int)(l.near_hit[i].x*1000),(int)(l.near_hit[i].y*1000),(int)(l.near_hit[i].r*1000),l.near_hit[i].flags);
   return true;
  }
  if(!strcmp(s,"lidar memory status")||!strcmp(s,"lidar memory list")){
   nav_logf("[LIDAR_MEMORY] enabled=%u count=%u overflow=%u; RAM current frame; occluded!=free\r\n",l.memory_enabled,nav_lidar_map_count(),nav_lidar_map_full());
+  nav_logf("[LIDAR_CATALOG] frozen=%u candidates=%u outliers=%u; confirm6 distinct scans/450ms; occluded confirmed objects retained\r\n",nav_lidar_map_frozen(),nav_lidar_map_candidates(),nav_lidar_map_outliers());
   if(!strcmp(s,"lidar memory list")){const NavLidarMemory *p=nav_lidar_map_items();for(unsigned i=0;i<nav_lidar_map_count();i++)nav_logf("[LIDAR_MEMORY_ITEM] %u x_mm=%d y_mm=%d radius_mm=%d age_ms=%lu hits=%u\r\n",i,(int)(p[i].x*1000),(int)(p[i].y*1000),(int)(p[i].r*1000),(unsigned long)(now-p[i].seen),p[i].hits);}
   return true;
  }
@@ -399,6 +551,9 @@ bool nav_lidar_command(const char *s,bool idle,uint32_t now){
   l.memory_enabled=!strcmp(s,"lidar memory on");nav_log("[LIDAR_MEMORY] planning use toggled; no move\r\n");return true;
  }
  if(!strcmp(s,"lidar memory clear")){nav_lidar_map_clear();nav_log("[LIDAR_MEMORY] cleared explicitly; no move\r\n");return true;}
+ if(!strcmp(s,"lidar memory freeze")||!strcmp(s,"lidar memory survey")){
+  nav_lidar_map_freeze(!strcmp(s,"lidar memory freeze"));nav_logf("[LIDAR_CATALOG] frozen=%u confirmed=%u; current near-obstacle braking remains active\r\n",nav_lidar_map_frozen(),nav_lidar_map_count());return true;
+ }
  int f,b,left,right;
  if(!strcmp(s,"lidar self off")){l.self_enabled=false;nav_log("[LIDAR] explicit self mask disabled\r\n");return true;}
  if(sscanf(s,"lidar self %d %d %d %d %c",&f,&b,&left,&right,&(char){0})==4&&f>0&&f<=150&&b>0&&b<=150&&left>0&&left<=150&&right>0&&right<=150){

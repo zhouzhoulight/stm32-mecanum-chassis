@@ -6,11 +6,16 @@
 #define CANDIDATE_MAX 48U
 typedef struct {
     float x,y,range,sigma;
+    float ax,ay,bx,by;
+    uint16_t halfwidth;
     uint16_t extent,n;
     uint8_t kind,intensity;
     bool line,edge;
 } Candidate;
 void features_init(FeatureTracker *t) { memset(t,0,sizeof *t); t->next_id=1;t->fov_span_cdeg=36000; }
+void features_init_installed(FeatureTracker *t){
+ (void)features_set_fov(t,INSTALLED_FOV_START_CDEG,INSTALLED_FOV_END_CDEG);
+}
 /* FOV applies in native raw angle BEFORE deskew or clustering. End 36000
  * includes raw zero; outside is unobserved, not a free-space observation. */
 bool features_set_fov(FeatureTracker *t,unsigned start,unsigned end){
@@ -76,6 +81,22 @@ static void cluster(FeatureTracker *t,const Ld19Scan *s,unsigned lo,unsigned hi,
     c.extent=(uint16_t)fminf(24000,hypotf(xmax-xmin,ymax-ymin));
     c.line=c.n>=5 && c.extent>=120 && major>1 && minor/major<0.08f;
     c.kind=c.line?2:0;
+    if(c.line){
+        float angle=.5f*atan2f(2*xy,xx-yy),ux=cosf(angle),uy=sinf(angle);
+        float low_proj=1e30f,high_proj=-1e30f,width=0;
+        /* Use every actual sample to enclose the fitted strip, including
+         * deviations from the PCA line; sigma alone is not a bound. */
+        for(unsigned k=lo;k<hi;k++){
+            unsigned i=(start+k)%total;
+            float x=t->px[i]-c.x,y=t->py[i]-c.y,along=ux*x+uy*y;
+            low_proj=fminf(low_proj,along);high_proj=fmaxf(high_proj,along);
+            width=fmaxf(width,fabsf(-uy*x+ux*y));
+        }
+        c.ax=c.x+ux*low_proj;c.ay=c.y+uy*low_proj;
+        c.bx=c.x+ux*high_proj;c.by=c.y+uy*high_proj;
+        /* Endpoint rounding is <=0.71mm; retain1mm extra enclosure. */
+        c.halfwidth=(uint16_t)fminf(24000,ceilf(width)+1);
+    }
     c.sigma=fmaxf(10.0f,sqrtf(minor)+(c.n<3?15.0f:5.0f));
     c.intensity=(uint8_t)(intensity/c.n);insert(out,count,&c);
 }
@@ -196,6 +217,8 @@ uint32_t features_extract_motion(FeatureTracker *t,const Ld19Scan *s,const Filte
         }else{v->vx_mm_s=0;v->vy_mm_s=0;}
         float alpha=ego?0.65f:0.85f;v->x_mm+=alpha*dx;v->y_mm+=alpha*dy;
         v->kind=c->kind;v->extent_mm=c->extent;v->npoints=c->n;
+        slot->ax_mm=c->ax;slot->ay_mm=c->ay;slot->bx_mm=c->bx;slot->by_mm=c->by;
+        slot->halfwidth_mm=c->halfwidth;
         v->sigma_mm=(uint16_t)ceilf(c->sigma);v->seen_age_ms=0;
         if(v->hits<65535)v->hits++;
         if(!s->partial && slot->streak<65535)slot->streak++;
@@ -204,7 +227,7 @@ uint32_t features_extract_motion(FeatureTracker *t,const Ld19Scan *s,const Filte
         if(slot->streak>=needed)slot->confirmed=true;
         v->state=slot->confirmed?TRACK_CONFIRMED:TRACK_TENTATIVE;
         v->flags=TRACK_OBSERVED|(ego?TRACK_EGO_COMPENSATED:0)|(t->deskew_valid?TRACK_DESKEWED:0)|
-            (c->range<450?TRACK_NEAR_RETURN:0)|(c->line?TRACK_LINE_FIT:0)|(weak?TRACK_WEAK_SUPPORT:0)|(c->edge?TRACK_FOV_EDGE:0);
+            (c->range<450?TRACK_NEAR_RETURN:0)|(c->line?(TRACK_LINE_FIT|TRACK_SEGMENT):0)|(weak?TRACK_WEAK_SUPPORT:0)|(c->edge?TRACK_FOV_EDGE:0);
         if(ego&&v->hits>=3&&hypotf(v->vx_mm_s,v->vy_mm_s)>150)v->flags|=TRACK_DYNAMIC;
         slot->intensity=c->intensity;slot->matched=true;slot->last_seen_us=s->t1_us;
     }
@@ -257,4 +280,31 @@ uint32_t features_tracks_payload(const FeatureTracker *t,uint32_t time,uint32_t 
         u16(p+26,v->seen_age_ms);u16(p+28,v->hits);u16(p+30,v->flags);n++;
     }
     out[10]=(uint8_t)n;return 11+n*TRACK_RECORD_BYTES;
+}
+/* Geometry precedes the matching TRACKS scan. Legacy receivers can ignore
+ * 0x76 and retain their original (conservative) disk; no field is repurposed. */
+static bool has_segment(const TrackSlot *s){
+    return s->used&&s->matched&&(s->value.flags&TRACK_SEGMENT)&&s->value.kind==2;
+}
+uint8_t features_segment_batches(const FeatureTracker *t){
+    unsigned n=0;for(unsigned i=0;i<TRACK_MAX;i++)if(has_segment(&t->slots[i]))n++;
+    return (uint8_t)(n?(n+SEGMENT_BATCH_MAX-1)/SEGMENT_BATCH_MAX:1);
+}
+uint32_t features_segments_payload(const FeatureTracker *t,uint32_t time,uint32_t scan,uint8_t batch,uint8_t *out,uint32_t cap){
+    uint8_t batches=features_segment_batches(t);
+    if(!out||batch>=batches||cap<11)return 0;
+    u32(out,time);u32(out+4,scan);out[8]=batch;out[9]=batches;out[10]=0;
+    unsigned seen=0,n=0;
+    for(unsigned i=0;i<TRACK_MAX;i++){
+        const TrackSlot *slot=&t->slots[i];if(!has_segment(slot))continue;
+        if(seen++<batch*SEGMENT_BATCH_MAX)continue;
+        if(n>=SEGMENT_BATCH_MAX)break;
+        if(11+(n+1)*SEGMENT_RECORD_BYTES>cap)return 0;
+        const float xy[]={slot->ax_mm,slot->ay_mm,slot->bx_mm,slot->by_mm};
+        for(unsigned j=0;j<4;j++)if(!isfinite(xy[j])||fabsf(xy[j])>32760)return 0;
+        uint8_t *p=out+11+n*SEGMENT_RECORD_BYTES;u16(p,slot->value.id);
+        for(unsigned j=0;j<4;j++)u16(p+2+j*2,(uint16_t)(int16_t)lroundf(xy[j]));
+        u16(p+10,slot->halfwidth_mm);n++;
+    }
+    out[10]=(uint8_t)n;return 11+n*SEGMENT_RECORD_BYTES;
 }

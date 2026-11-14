@@ -24,6 +24,7 @@ enum {
     MSG_STATUS       = 0x72,
     MSG_TRACKS       = 0x73,
     MSG_SHADOW       = 0x74,
+    MSG_SEGMENTS     = 0x76, /* protocol2 additive, same-scan surface capsules */
     MSG_TIME         = 0xE6
 };
 

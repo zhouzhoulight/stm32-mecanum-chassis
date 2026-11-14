@@ -124,7 +124,7 @@ static bool touches_raw_fixture(float x,float y,float h,float margin)
 bool nav_map_footprint(float lx,float ly,float h,float margin)
 {
  if(!isfinite(lx)||!isfinite(ly)||!isfinite(h)||!isfinite(margin)||margin<0)return false;
- if(!nav_lidar_plan_clear(lx,ly,h,margin))return false;
+ if(!nav_lidar_plan_clear(lx,ly,h,nav_lidar_plan_token()?fmaxf(margin,.03f):margin))return false;
  float x=2.25f-lx,y=2.25f-ly,c=cosf(h),s=sinf(h);
  float ox=(body[0]-body[1])*.5f,oy=(body[2]-body[3])*.5f;
  float cx=x-c*ox+s*oy,cy=y-s*ox-c*oy;
@@ -176,6 +176,12 @@ static bool add(NavMapNode *p,unsigned *n,float x,float y,float h,unsigned stop)
 static int work_index(unsigned n){return n==1?0:n==7?1:n==3?2:-1;}
 static float jx(unsigned n){int k=work_index(n);return 2.25f-coord[n%3]+(k>=0?offsets[k][0]:0);}
 static float jy(unsigned n){int k=work_index(n);float y=2.25f-coord[2-n/3];return y+(k>=0?offsets[k][1]:(n==0||n==2?.050f:0));}
+/* Travel junctions and taught work docks are different objects. In particular,
+ * the raw dock has19mm platter clearance and cannot be a through-road turn.
+ * Upper travel usesN.y=200mm; rotations use a verified275mm clearance bay.
+ * Taught dock goals above remain byte-for-byte unchanged. */
+static float graph_x(unsigned n){return 2.25f-coord[n%3];}
+static float graph_y(unsigned n){float y=2.25f-coord[2-n/3];return y+(n==1?.075f:(n==0||n==2?.050f:0));}
 static bool blended_edge(const NavMapNode *a,const NavMapNode *b,float h0,float h1)
 {
  float l=hypotf(a->x-b->x,a->y-b->y),d=atan2f(sinf(h1-h0),cosf(h1-h0));
@@ -396,7 +402,7 @@ bool nav_map_arm_safe(float lx,float ly,float h,float radius,float ox,float oy)
 static bool detour_attachment(const NavMapNode *at,unsigned junction){
  unsigned nearest=0;float nearest_d=100;
  for(unsigned j=0;j<9;j++){
-  float d=hypotf(at->x-jx(j),at->y-jy(j));
+  float d=hypotf(at->x-graph_x(j),at->y-graph_y(j));
   if(d<nearest_d){nearest=j;nearest_d=d;}
  }
  /* Docks and taught stations attach to their nearest physical junction.
@@ -404,7 +410,7 @@ static bool detour_attachment(const NavMapNode *at,unsigned junction){
  if(nearest_d<=.25f)return junction==nearest;
  unsigned road=12;float road_d=100;
  for(unsigned e=0;e<12;e++){
-  unsigned u=edge[e][0],v=edge[e][1];float ax=jx(u),ay=jy(u),dx=jx(v)-ax,dy=jy(v)-ay;
+  unsigned u=edge[e][0],v=edge[e][1];float ax=graph_x(u),ay=graph_y(u),dx=graph_x(v)-ax,dy=graph_y(v)-ay;
   float t=((at->x-ax)*dx+(at->y-ay)*dy)/(dx*dx+dy*dy);
   if(t<0||t>1)continue;
   float d=hypotf(at->x-ax-t*dx,at->y-ay-t*dy);
@@ -421,7 +427,15 @@ static bool detour_link(unsigned u,unsigned v,const NavMapNode *p){
  if(v>=1&&v<=9)return detour_attachment(&p[u],v-1);
  return false; /* Exact endpoints never form a visibility bypass. */
 }
-static bool detour_edge(const NavMapNode *a,const NavMapNode *b){
+/* Straight upper-road travel stays50mm clear of the yellow/platter bounds.
+ * Only an actual change of heading uses this deterministic move-turn-return
+ * manoeuvre. Search remains9 junctions x6 headings, without a fine grid. */
+static bool upper_turn_bay(const NavMapNode *a,const NavMapNode *b,NavMapNode *via){
+ if(hypotf(a->x-graph_x(1),a->y-graph_y(1))>=.0001f||hypotf(b->x-graph_x(1),b->y-graph_y(1))>=.0001f)return false;
+ if(fabsf(atan2f(sinf(b->h-a->h),cosf(b->h-a->h)))<.001f)return false;
+ *via=(NavMapNode){graph_x(1),.275f,a->h,0};return true;
+}
+static bool detour_segment(const NavMapNode *a,const NavMapNode *b){
  float length=hypotf(b->x-a->x,b->y-a->y),dh=atan2f(sinf(b->h-a->h),cosf(b->h-a->h));
  unsigned samples=(unsigned)ceilf(fmaxf(length/.01f,fabsf(dh)/.025f));if(!samples)samples=1;
  for(unsigned j=0;j<=samples;j++){
@@ -430,6 +444,14 @@ static bool detour_edge(const NavMapNode *a,const NavMapNode *b){
   if(!nav_map_footprint(a->x+(b->x-a->x)*q,a->y+(b->y-a->y)*q,a->h+dh*q,.015f))return false;
  }return true;
 }
+static bool detour_edge(const NavMapNode *a,const NavMapNode *b){
+ NavMapNode via;
+ if(upper_turn_bay(a,b,&via)){
+  NavMapNode after=via;after.h=b->h;
+  return detour_segment(a,&via)&&detour_segment(&via,&after)&&detour_segment(&after,b);
+ }
+ return detour_segment(a,b);
+}
 static bool detour_add(NavMapNode *out,unsigned *n,float x,float y,float h,unsigned stop){
  if(*n)h=out[*n-1].h+atan2f(sinf(h-out[*n-1].h),cosf(h-out[*n-1].h));
  return add(out,n,x,y,h,stop);
@@ -437,38 +459,88 @@ static bool detour_add(NavMapNode *out,unsigned *n,float x,float y,float h,unsig
 bool nav_map_detour(NavMapNode *out,unsigned *count_out,const NavMapNode *start,const NavMapNode *goals,unsigned goal_count,const char **why){
  enum {N=11,H=6,S=N*H};
  static int8_t edges[H][N][N],turns[N][H][H];
+ /* Physical junctions/cardinal headings recur at every task leg. Reuse
+  * only IDENTICALLY directed swept checks within this one frozen input.
+  * Exact start/goal attachments and arbitrary headings remain uncached.
+  * Nothing survives a new call, frame/config change, or live-map search. */
+ static int8_t fixed_edges[4][9][9],fixed_turns[9][4][4];
  static float dist[S];static int16_t parent[S];static bool visited[S];
  if(!count_out||!why)return false;
  *count_out=0;*why="invalid detour arguments";
  if(!out||!start||!goals||goal_count<1||goal_count>10||!valid||!isfinite(start->x)||!isfinite(start->y)||!isfinite(start->h))return false;
+ uint32_t token=nav_lidar_plan_token();unsigned map_generation=generation;
+ memset(fixed_edges,-1,sizeof fixed_edges);memset(fixed_turns,-1,sizeof fixed_turns);
  NavMapNode from=*start;from.stop=0;
  if(!detour_add(out,count_out,from.x,from.y,from.h,0))return false;
  for(unsigned leg=0;leg<goal_count;leg++){
-  const NavMapNode goal=goals[leg];
+  NavMapNode goal=goals[leg];
   if(!isfinite(goal.x)||!isfinite(goal.y)||!isfinite(goal.h)||!goal.stop){*why="invalid detour task goal";return false;}
+  if(goal.stop==9){
+   /* QR placement is specified as a100mm interval either side of nominal.
+    * Choose the closest observation pivot within75mm, not a larger guard
+    * relaxation. This accommodates a real pole near one end of the dock. */
+   static const float offsets_y[]={0,.025f,-.025f,.050f,-.050f,.075f,-.075f};
+   bool found=false;
+   for(unsigned option=0;option<sizeof offsets_y/sizeof offsets_y[0];option++){
+    float y=jy(5)+offsets_y[option];bool clear=true;
+    for(unsigned q=0;q<4;q++){
+     NavMapNode a={goal.x,y,goal.h+q*PI*.5f,0},b={goal.x,y,goal.h+(q+1)*PI*.5f,0};
+     if(!detour_edge(&a,&b)){clear=false;break;}
+    }
+    if(clear){goal.y=y;found=true;if(option)nav_logf("[QR_DOCK] offset_y_mm=%d; same map frame; full turn footprint verified\r\n",(int)roundf(offsets_y[option]*1000));break;}
+   }
+   if(!found){*why="QR observation turn footprint blocked";*count_out=0;return false;}
+  }
   NavMapNode p[N];p[0]=from;p[10]=goal;
-  for(unsigned j=0;j<9;j++)p[j+1]=(NavMapNode){jx(j),jy(j),0,0};
+  for(unsigned j=0;j<9;j++)p[j+1]=(NavMapNode){graph_x(j),graph_y(j),0,0};
   float heading[H]={0,PI*.5f,PI,PI*1.5f,from.h,goal.h};
   memset(edges,-1,sizeof edges);memset(turns,-1,sizeof turns);
   for(unsigned j=0;j<S;j++){dist[j]=1e9f;parent[j]=-1;visited[j]=false;}
   unsigned first=4,finish=10*H+5;dist[first]=0;
   for(unsigned it=0;it<S;it++){
    if(!nav_hw_plan_service()){*why="detour planning interrupted";return false;}
+   if(generation!=map_generation||(token&&nav_lidar_plan_token()!=token)){
+    *why="detour map/frame changed during planning";*count_out=0;return false;
+   }
    unsigned state=S;for(unsigned j=0;j<S;j++)if(!visited[j]&&(state==S||dist[j]<dist[state]))state=j;
    if(state==S||dist[state]>1e8f)break;
    if(state==finish)break;
    visited[state]=true;unsigned u=state/H,h=state%H;
    NavMapNode a={p[u].x,p[u].y,heading[h],0};
    for(unsigned v=0;v<N;v++)if(v!=u&&detour_link(u,v,p)){
+    /* The right outer vertical road is lateral/blind from a WEST start.
+     * Face that road before traversing it during the QR survey. Other roads
+     * remain holonomic; a universal forward-only rule traps recovery at the
+     * tight taught raw dock. A full QR scan below completes scene acquisition. */
+    if(goal.stop==9){
+     float dx=p[v].x-a.x,dy=p[v].y-a.y;
+     if(a.x<.30f&&p[v].x<.30f&&fabsf(dy)>2*fabsf(dx)&&dx*dx+dy*dy>.0001f&&fabsf(atan2f(sinf(atan2f(dy,dx)-a.h),cosf(atan2f(dy,dx)-a.h)))>PI/3)continue;
+    }
     unsigned next=v*H+h;
-    if(edges[h][u][v]<0){NavMapNode b={p[v].x,p[v].y,heading[h],0};edges[h][u][v]=edges[h][v][u]=(int8_t)detour_edge(&a,&b);}
+    if(edges[h][u][v]<0){
+     int8_t *saved=token&&h<4&&u>=1&&u<=9&&v>=1&&v<=9?&fixed_edges[h][u-1][v-1]:NULL;
+     if(saved&&*saved>=0)edges[h][u][v]=edges[h][v][u]=*saved;
+     else{
+      NavMapNode b={p[v].x,p[v].y,heading[h],0};edges[h][u][v]=edges[h][v][u]=(int8_t)detour_edge(&a,&b);
+      if(saved)*saved=edges[h][u][v];
+     }
+    }
     float cost=hypotf(p[v].x-p[u].x,p[v].y-p[u].y)/planning_speed;
     if(edges[h][u][v]&&dist[next]>dist[state]+cost){dist[next]=dist[state]+cost;parent[next]=(int16_t)state;}
    }
    for(unsigned nh=0;nh<H;nh++)if(nh!=h){
     unsigned next=u*H+nh;
-    if(turns[u][h][nh]<0){NavMapNode b={p[u].x,p[u].y,heading[nh],0};turns[u][h][nh]=turns[u][nh][h]=(int8_t)detour_edge(&a,&b);}
+    if(turns[u][h][nh]<0){
+     int8_t *saved=token&&u>=1&&u<=9&&h<4&&nh<4?&fixed_turns[u-1][h][nh]:NULL;
+     if(saved&&*saved>=0)turns[u][h][nh]=turns[u][nh][h]=*saved;
+     else{
+      NavMapNode b={p[u].x,p[u].y,heading[nh],0};turns[u][h][nh]=turns[u][nh][h]=(int8_t)detour_edge(&a,&b);
+      if(saved)*saved=turns[u][h][nh];
+     }
+    }
     float dh=fabsf(atan2f(sinf(heading[nh]-heading[h]),cosf(heading[nh]-heading[h]))),cost=dh/planning_yaw+.03f;
+    NavMapNode b={p[u].x,p[u].y,heading[nh],0},via;
+    if(upper_turn_bay(&a,&b,&via))cost+=2*hypotf(a.x-via.x,a.y-via.y)/planning_speed;
     if(turns[u][h][nh]&&dist[next]>dist[state]+cost){dist[next]=dist[state]+cost;parent[next]=(int16_t)state;}
    }
   }
@@ -480,9 +552,26 @@ bool nav_map_detour(NavMapNode *out,unsigned *count_out,const NavMapNode *start,
   unsigned reverse[S],used=0,state=finish;
   while(state!=first){if(used==S||parent[state]<0){*why="invalid detour predecessor";return false;}reverse[used++]=state;state=(unsigned)parent[state];}
   while(used){state=reverse[--used];unsigned u=state/H,h=state%H;
+   NavMapNode next={p[u].x,p[u].y,heading[h],state==finish?goal.stop:0},via;
+   if(*count_out&&upper_turn_bay(&out[*count_out-1],&next,&via)){
+    if(!detour_add(out,count_out,via.x,via.y,via.h,0)||!detour_add(out,count_out,via.x,via.y,next.h,0)){*why="turn bay node capacity";return false;}
+   }
    if(!detour_add(out,count_out,p[u].x,p[u].y,heading[h],state==finish?goal.stop:0)){*why="detour node capacity";return false;}
   }
   if(!out[*count_out-1].stop)out[*count_out-1].stop=goal.stop;
+  if(goal.stop==9){
+   /* Front150deg alone cannot see all field roads from one docked heading.
+    * One complete observation turn at the wide QR dock ends at the SAME
+    * physical heading. The last point alone is a task stop; no extra task
+    * or origin reset is introduced. Every quadrant uses the full body test. */
+   out[*count_out-1].stop=0;
+   for(unsigned q=1;q<=4;q++){
+    NavMapNode a={goal.x,goal.y,goal.h+(q-1)*PI*.5f,0};
+    NavMapNode b={goal.x,goal.y,goal.h+q*PI*.5f,q==4?9U:0U};
+    if(!detour_edge(&a,&b)){*why="QR observation turn footprint blocked";*count_out=0;return false;}
+    if(!detour_add(out,count_out,b.x,b.y,b.h,b.stop)){*why="QR observation node capacity";return false;}
+   }
+  }
   from=goal;
  }
  if(*count_out<2){*why="empty detour";return false;}
@@ -499,6 +588,15 @@ bool nav_map_fixture_core(float lx,float ly,float inset){
  float radius=raw_radius-inset;
  return dx*dx+dy*dy<radius*radius;
 }
+bool nav_map_static_covered(float lx,float ly,float r){
+ if(!isfinite(lx)||!isfinite(ly)||!isfinite(r)||r<=0)return false;
+ float x=2.25f-lx,y=2.25f-ly;
+ for(unsigned i=0;i<2;i++)for(unsigned j=0;j<2;j++){
+  float ax=.55f+.85f*i,ay=.55f+.85f*j;
+  if(x-r>=ax&&x+r<=ax+.45f&&y-r>=ay&&y+r<=ay+.45f)return true;
+ }
+ return false;
+}
 
 bool nav_map_sensed_path(NavMapNode *out,unsigned *n,const char **why){
  NavMapNode goals[9];unsigned count=0;
@@ -509,4 +607,11 @@ bool nav_map_sensed_path(NavMapNode *out,unsigned *n,const char **why){
  goals[count++]=(NavMapNode){.020f,.020f,0,8};
  NavMapNode from={start_pose[0],start_pose[1],start_pose[2],0};
  return nav_map_detour(out,n,&from,goals,count,why);
+}
+/* Survey ends at the nominal QR dock only. It must not require any of the
+ * later workstations to be reachable before gathering the initial scene. */
+bool nav_map_qr_path(NavMapNode *out,unsigned *n,const char **why){
+ NavMapNode from={start_pose[0],start_pose[1],start_pose[2],0};
+ NavMapNode qr={jx(5),jy(5),PI*.5f,9};
+ return nav_map_detour(out,n,&from,&qr,1,why);
 }

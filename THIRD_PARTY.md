@@ -16,4 +16,4 @@ HAL/CMSIS由ST官方STM32CubeF4 V1.28.3安装包取得，HAL文件版本V1.8.5�
 
 `src/nav/generated`与`src/nav/qp`保留MATLAB生成源码的原始文件头、用途/授权提示，根目录MIT不覆盖或扩大这些文件的上游授权。这里只发布可部署算法C，未发布MATLAB模型或测试数据。
 
-独立雷达板的lidar/firmware/vendor同样保留ST HAL/CMSIS许可及逐文件版权。新增lidar/tools/build.py为本项目构建入口；不随此次发布上位机及其运行数据。当前机械臂已集成在主控，旧独立机械臂发布镜像已移除；具体状态以根README为准。
+独立雷达板的lidar/firmware/vendor同样保留ST HAL/CMSIS许可及逐文件版权。lidar/tools/build.py为本项目构建入口；本次不发布上位机及运行数据。当前机械臂已集成在主控，具体状态以根README及最新交接为准。

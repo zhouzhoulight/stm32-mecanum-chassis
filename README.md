@@ -1,35 +1,34 @@
-# STM32 麦轮底盘、机械臂与 LD19 雷达固件
+# STM32 麦轮底盘、机械臂与 LD19 双板固件
 
-更新日期：2026-11-12。主控与独立雷达板均为 STM32F407VET6，25MHz 外部晶振、168MHz 系统时钟。
+更新：2026-11-14。主控和雷达板均为STM32F407VET6，HSE25MHz、SYSCLK168MHz。
 
-| 内容 | 当前版本 | 验证状态 |
-| --- | --- | --- |
-| 主控：底盘＋机械臂＋板上避障规划 | `v2.7.31-clockretry-20261111` | 重新编译与离线候选一致；**未烧录、未实车复测** |
-| 雷达处理板 | `LD19_BENCH_F407VE_0.3.3`，协议2 | 重新编译与此前烧录镜像一致；本次未操作硬件 |
-| 机械臂 | 集成 R9E 状态机 | 已编入主控；`arm/` 保存共享依赖及独立工程源码 |
+**接手入口：[详细技术栈、代码结构、接线、状态机与未完成事项](docs/HANDOFF_V2738_20261114.md)。** 此文优先于旧版说明；二维码板实体回波要求及待验收矩阵见第9节。
 
-先阅读[当前交接说明](docs/HANDOFF_F407_LIDAR_20261112.md)、[接线与命令](docs/WIRING_AND_COMMANDS.md)、[双板协议](docs/LIDAR_LINK.md)。
+| 部分 | 当前代码 | 状态 |
+|---|---|---|
+| 主控：底盘＋机械臂＋九路口规划 | v2.7.38-scene-20261114 | 已编译、离线回归；尚未烧录/实车验证 |
+| LD19处理板 | LD19_BENCH_F407VE_0.3.5_FRONT150，协议2 | 此前已有实板使用；本次仅重编译，未下载 |
+| 机械臂 | 主控集成R9系列状态机，依赖在arm/ | 本次APP及标定存储代码不变 |
 
-此次仅发布最新 STM32 源码、HAL/CMSIS、构建入口、当前 BIN/HEX 及详细交接文档；不包含仿真、测试数据、实测日志、调试符号、上位机运行数据和本地中间提交。`src/nav/generated/`、`src/nav/qp/` 是实际部署的算法 C，须保留。
+最近已知实车主控为v2.7.37，不能把候选版仿真结果称为实车结果。本版修复转盘弱回波、障碍确认/冻结、通行路口与工位坐标混用、拐角误制动和接近段制动。**二维码板专门处理尚未新增，严重单轮打滑仍有明确失败反例。**
 
-## 编译
+## 构建
 
-Python 3.9+、GNU Arm Embedded GCC（本次为 STM32 GNU GCC 13.3.1）；雷达板还需要 CMake 3.20+ 和 Ninja。先将工具加入 PATH，从仓库根目录执行：
+Python3.9+、GNU Arm GCC（验证为13.3.1）；雷达再需CMake3.20+和Ninja。工具加入PATH，或设置CHASSIS_GCC、ARM_GCC、CMAKE、NINJA为对应可执行文件。仓库根目录执行：
 
 ```powershell
 python scripts/build_nav.py
 python lidar/tools/build.py
 ```
 
-主控也可设置 `CHASSIS_GCC`；雷达可设置 `ARM_GCC`、`CMAKE`、`NINJA`，分别指向工具可执行文件。脚本只编译，不连接串口或下载器，不发运动指令。
+两个入口只编译，不访问串口/下载器、不发运动指令。输出为build/nav1k/、lidar/build/Release/。发布BIN/HEX及build.json位于firmware/current/、lidar/firmware/current/。
 
-- 主控输出 `build/nav1k/chassis-nav1k.bin`、`.hex`、`build.json`。
-- 雷达输出 `lidar/build/Release/LD19Bench.bin`、`.hex`、`build.json`。
-- 当前发布镜像：`firmware/current/`、`lidar/firmware/current/`。
-- `chassis.csolution.yml` 是可选 CMSIS-Toolbox 入口，已补齐雷达源文件。本次只验证上述 Python/GCC 构建，未声称验证所有 IDE。
+BIN基址0x08000000；保留主控sector7（0x08060000..0x0807FFFF）的机械臂标定，不能随意全片擦除。Flash记录不提供驱动器跨断电物理绝对参考。
 
-BIN 下载基址均为 `0x08000000`；HEX 自带地址。主控保留 sector7（`0x08060000..0x0807FFFF`）的机械臂标定，整片擦除会丢失；Flash 高度记录不等于驱动器跨断电物理绝对定位。
+## 范围与验证
 
-本版仍为诊断候选。同步重试改善已在离线验证中出现，自身边缘回波、原料盘边缘误检及严重打滑仍有反例，不能承诺全图毫米级定位或已完成无障碍整圈实测。
+仅最新STM32源码、HAL/CMSIS、生成算法C、构建依赖、当前BIN/HEX和交接文档。无仿真文件/数据、测试数据、实车日志、上位机或本地中间开发提交。src/nav/generated/、src/nav/qp/是实机依赖，必须保留。
 
-第三方许可见 [THIRD_PARTY.md](THIRD_PARTY.md) 及各目录原始许可证。
+31组本机C回归通过；107例软件在环含6例旧版对照，候选96例完整导航、4例预期停车、1例强打滑失败。100RPM纯导航约117～156秒，不含24次取放，未证明整场150秒或全图3mm精度。详见交接的模型假设与边界。
+
+接线命令：[WIRING_AND_COMMANDS](docs/WIRING_AND_COMMANDS.md)。双板协议：[LIDAR_LINK](docs/LIDAR_LINK.md)。雷达：[lidar说明](lidar/README.md)。许可：[THIRD_PARTY](THIRD_PARTY.md)。

@@ -42,11 +42,9 @@ typedef struct {
 } AppState;
 
 static AppState s;
-/* Confirmed installed profile: raw180 right, raw270 front, raw360 left.
- * Reapply after EVERY tracker reset; PC capture control cannot unmask the rear. */
+/* Front150deg centred on native270deg:195..345. Reapply after every reset. */
 static void installed_features_init(void){
- features_init(&s.tracker);(void)features_set_fov(&s.tracker,18000,36000);
- (void)features_add_fov(&s.tracker,8800,9200);
+ features_init_installed(&s.tracker);
 }
 
 static bool app_send_message(uint8_t cmd, uint8_t seq, const uint8_t *payload, uint16_t len)
@@ -59,7 +57,10 @@ static bool app_send_message(uint8_t cmd, uint8_t seq, const uint8_t *payload, u
 
 static bool vehicle_send(uint8_t cmd,uint8_t seq,const uint8_t *p,uint16_t len){
  uint8_t frame[PB_FRAME_MAX];uint32_t n=pb_encode(cmd,seq,p,len,frame,sizeof frame);
- bool ok=n&&vehicle_uart_send(frame,n);if(!ok)s.vehicle_drops++;return ok;
+ bool priority=cmd==MSG_TIME||cmd==0xE8;
+ bool ok=n&&(priority?vehicle_uart_send_priority(frame,n):vehicle_uart_send(frame,n));
+ if(!ok)s.vehicle_drops++;
+ return ok;
 }
 static bool app_pb_send(void *user, uint8_t cmd, uint8_t seq,
                         const uint8_t *payload, uint16_t len)
@@ -123,10 +124,20 @@ static void app_on_scan(const Ld19Scan *scan, uint32_t now_us)
     if (len == 0U) return;
     if(s.pctx.stream==2U) (void)app_send_message(MSG_FEATURES, s.feature_seq++, payload, (uint16_t)len);
     /* Explicit native FOV metadata, independent of PC display angle settings. */
-    uint8_t view[12]={0x50,0x46,0xA0,0x8C,0,0,0,0,0x60,0x22,0xF0,0x23}; /* 18000,36000 LE */
+    uint8_t view[8]={0x2C,0x4C,0xC4,0x86,0,0,0,0}; /*19500..34500 LE; no rear slot*/
     memcpy(view+4,&scan->t1_us,4);
-    if(s.pctx.stream==2U)(void)app_send_message(0x75,s.track_seq++,view,12);
-    if(s.vehicle_enabled)(void)vehicle_send(0x75,s.track_seq++,view,12);
+    if(s.pctx.stream==2U)(void)app_send_message(0x75,s.track_seq++,view,sizeof view);
+    if(s.vehicle_enabled)(void)vehicle_send(0x75,s.track_seq++,view,sizeof view);
+    /* Compact current-scan line capsules first; the main controller binds
+     * endpoints to TRACKS by scan timestamp, scan_id AND track_id. */
+    for(uint8_t b=0;b<features_segment_batches(&s.tracker);b++){
+        len=features_segments_payload(&s.tracker,scan->t1_us,scan->scan_id,b,payload,sizeof payload);
+        if(len){
+            uint8_t seq=s.track_seq++;
+            if(s.pctx.stream==2U)(void)app_send_message(MSG_SEGMENTS,seq,payload,(uint16_t)len);
+            if(s.vehicle_enabled)(void)vehicle_send(MSG_SEGMENTS,seq,payload,(uint16_t)len);
+        }
+    }
     for (uint8_t b=0; b<features_track_batches(&s.tracker); b++) {
         len=features_tracks_payload(&s.tracker,scan->t1_us,scan->scan_id,b,payload,sizeof payload);
         if(len){

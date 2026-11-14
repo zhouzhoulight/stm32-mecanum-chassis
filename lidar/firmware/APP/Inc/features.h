@@ -17,6 +17,9 @@
 #define TRACK_DESKEWED 0x20U
 #define TRACK_FOV_EDGE 0x80U /* partially visible near angular mask boundary; no localization */
 #define TRACK_WEAK_SUPPORT 0x40U /* sparse or spatially inconsistent; not a permanent obstacle */
+#define TRACK_SEGMENT 0x0100U /* same-scan 0x76 capsule geometry is available */
+#define SEGMENT_RECORD_BYTES 12U
+#define SEGMENT_BATCH_MAX 19U
 enum { TRACK_TENTATIVE=1, TRACK_CONFIRMED=2, TRACK_COASTING=3 };
 typedef struct {
     uint16_t id;
@@ -31,6 +34,9 @@ typedef struct {
     float innovation_mm;
     uint8_t intensity;
     bool used, matched, confirmed;
+    /* Current observed surface, not a disk made from its tangent length. */
+    float ax_mm,ay_mm,bx_mm,by_mm;
+    uint16_t halfwidth_mm;
 } TrackSlot;
 typedef struct {
     uint16_t next_id;
@@ -46,6 +52,7 @@ typedef struct {
     uint16_t point_index[SCAN_MAX_POINTS];
 } FeatureTracker;
 void features_init(FeatureTracker *t);
+void features_init_installed(FeatureTracker *t);
 bool features_add_fov(FeatureTracker *,unsigned start_cdeg,unsigned end_cdeg);
 bool features_set_fov(FeatureTracker *t,unsigned start_cdeg,unsigned end_cdeg);
 uint32_t features_extract(FeatureTracker *t, const Ld19Scan *scan,
@@ -56,4 +63,7 @@ uint32_t features_extract_motion(FeatureTracker *t, const Ld19Scan *scan,
 uint32_t features_tracks_payload(const FeatureTracker *t, uint32_t t_us, uint32_t scan_id,
                                  uint8_t batch, uint8_t *out, uint32_t cap);
 uint8_t features_track_batches(const FeatureTracker *t);
+uint8_t features_segment_batches(const FeatureTracker *t);
+uint32_t features_segments_payload(const FeatureTracker *t,uint32_t t_us,uint32_t scan_id,
+                                  uint8_t batch,uint8_t *out,uint32_t cap);
 #endif

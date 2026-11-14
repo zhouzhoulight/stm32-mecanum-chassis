@@ -48,10 +48,12 @@ project:
         - file: src/nav/nav_increment.c
         - file: src/nav/nav_odom.c
         - file: src/nav/nav_route.c
+        - file: src/nav/nav_motion.c
         - file: src/nav/nav_arm.c
         - file: src/nav/nav_arm_hw.c
         - file: src/nav/nav_map.c
         - file: src/nav/nav_lidar.c
+        - file: src/nav/nav_lidar_policy.c
         - file: src/nav/nav_lidar_map.c
         - file: src/nav/nav_vision.c
         - file: src/nav/nav_mission.c
@@ -76,7 +78,6 @@ project:
         - file: src/nav/qp/xgemv.c
         - file: src/nav/qp/xgerc.c
         - file: src/nav/qp/xnrm2.c
-        - file: src/nav/nav_slip.c
     - group: ST HAL
       files:
         - file: vendor/Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_tim.c
@@ -92,3 +93,4 @@ project:
         - file: vendor/Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_pwr.c
         - file: vendor/Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_uart.c
         - file: vendor/Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_pwr_ex.c
+

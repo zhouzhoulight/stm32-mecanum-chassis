@@ -6,7 +6,7 @@
 #include <stdint.h>
 
 #ifndef APP_VERSION
-#define APP_VERSION "LD19_BENCH_F407VE_0.2.0"
+#define APP_VERSION "LD19_BENCH_F407VE_0.3.5_FRONT150"
 #endif
 #ifndef PROTOCOL_VERSION
 #define PROTOCOL_VERSION 2
@@ -20,6 +20,8 @@
 #define APB2_HZ                84000000U
 #define HOST_BAUD              460800U
 #define LIDAR_BAUD             230400U
+#define INSTALLED_FOV_START_CDEG 19500U
+#define INSTALLED_FOV_END_CDEG   34500U
 
 #define LD19_PACKET_SIZE       47U
 #define LD19_POINTS_PER_PACKET 12U
