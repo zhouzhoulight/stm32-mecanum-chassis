@@ -9,6 +9,7 @@
 #include "nav/nav_platform.h"
 #include "nav/nav_control.h"
 #include "nav/nav_motion.h"
+#include "nav/nav_mission.h"
 #include <math.h>
 #include <string.h>
 #define PI 3.14159265358979323846f
@@ -230,10 +231,26 @@ static bool replan_fixed(NavRoute *r,const NavPose *pose,unsigned px,unsigned py
   if(n==10){r->fault="too many remaining task stops";return false;}
   remaining[n++]=(Node){r->p[k].x,r->p[k].y,r->p[k].h,r->p[k].stop};
  }
- if(!n){r->fault="no remaining stations";return false;}
- Node start={pose->x_m,pose->y_m,pose->yaw_rad,0};const char *why;
+ Node start={pose->x_m,pose->y_m,pose->yaw_rad,0};const char *why="no remaining stations";
  nav_map_plan_profile(100,px);
- if(!nav_map_detour(nodes,&node_count,&start,remaining,n,&why)){r->fault=why;return false;}
+ bool park_only=false;
+ unsigned home=nav_mission_home(&park_only);
+ bool ok=!n&&station==9&&nav_map_qr_enabled()?
+   nav_map_official_path(nodes,&node_count,&start,home,park_only,&why):
+   n?nav_map_detour(nodes,&node_count,&start,remaining,n,&why):false;
+ if(!ok&&!n&&station==9&&home&&!park_only&&
+    !strcmp(why,"no connected nine-junction route; no in-corridor bypass")&&nav_hw_plan_service()){
+  nav_log("[MISSION_PARTIAL] workstation route disconnected; attempt direct park\r\n");
+  nav_mission_select_park();
+  ok=nav_map_official_path(nodes,&node_count,&start,home,true,&why);
+ }
+ if(!ok){r->fault=n||station==9?why:"no remaining stations";return false;}
+ if(manual&&!home)for(unsigned k=0;k<node_count;k++){
+  unsigned stop=nodes[k].stop;
+  if((stop==2||stop==3||stop==5||stop==6)&&!nav_map_work_span(nodes+k)){
+   r->fault="planned work station slot span blocked";return false;
+  }
+ }
  if(!build_route(r,percent,px,py,lever))return false;
  r->manual=manual;r->station=station;return true;
 }
@@ -442,8 +459,8 @@ int nav_route_step(NavRoute *r,const NavPose *p,float gyro,float dt,int wheel[4]
   if(near&&hypotf(p->vx_mps,p->vy_mps)<.008f&&fabsf(gyro)<.025f&&change<.5f)r->stable++;else r->stable=0;
   if(r->stable>=3){
    r->station=r->p[a].stop;r->stable=0;r->hold=0;memset(r->integral,0,sizeof r->integral);
-   if(a==r->n-1){r->finished=true;return 1;}
    if(r->manual&&(r->station<=6||r->station==9)){r->waiting=true;memset(r->wheel,0,sizeof r->wheel);memset(wheel,0,4*sizeof *wheel);}
+   else if(a==r->n-1){r->finished=true;return 1;}
   }else if((r->hold+=dt)>8){r->fault="workstation settle deadline";return -1;}
  }else{
   /* Tracking governor advances continuously, never resets the frame or

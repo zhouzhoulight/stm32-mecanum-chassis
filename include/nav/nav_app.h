@@ -13,6 +13,8 @@ unsigned nav_app_work_station(void);
 bool nav_app_station_target(float pose[3]);
 void nav_app_pose(float pose[3]);
 bool nav_app_segmented(void);
+bool nav_app_official_plan_ready(void);
+bool nav_app_work_clear(float x,float y);
 bool nav_app_upcoming(float pose[3],unsigned *station,float *remaining);
 bool nav_app_arm_approach_clear(float radius,float ox,float oy);
 /* Default statistical rejection -> slower reference, continue the task.

@@ -3,7 +3,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stddef.h>
-#define NAV_VERSION "v2.7.38-scene-20261114"
+#define NAV_VERSION "v2.7.43-arm2-preview-20261118"
 #define NAV_FORWARD_PPM 12924U
 #define NAV_LATERAL_PPM 13389U
 #define NAV_MAX_WHEEL_RPM 400

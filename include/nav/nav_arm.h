@@ -26,4 +26,8 @@ bool nav_app_station_wait(void);
 void nav_arm_hw_init(void);
 bool nav_arm_prefetch(unsigned slot,unsigned turn,bool open_jaw);
 bool nav_arm_envelope_ready(void);
+bool nav_arm_observation_available(bool qr);
+bool nav_arm_observation_begin(bool qr,unsigned camera_pwm);
+bool nav_arm_observation_ready(void);
+bool nav_arm_observation_return(void);
 #endif

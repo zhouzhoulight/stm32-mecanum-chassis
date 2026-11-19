@@ -22,6 +22,8 @@ static float start_pose[3];
 void nav_map_plan_start(float x,float y,float h){start_pose[0]=x;start_pose[1]=y;start_pose[2]=h;}
 static float raw_min_x=1.10f,raw_max_x=1.30f,raw_y=2.40f,raw_radius=.15f;
 static float body[4]={.15f,.15f,.15f,.15f}; /* front,rear,left,right */
+/* Figure 1 and Table 2, lower-left map coordinates. Half extents in metres. */
+static const float work_regions[2][4]={{1.20f,.075f,.290f,.075f},{.075f,1.20f,.075f,.290f}};
 bool nav_map_valid(void){return valid;}
 void nav_map_invalidate(void){valid=false;generation++;}
 unsigned nav_map_generation(void){return generation;}
@@ -121,25 +123,30 @@ static bool touches_raw_fixture(float x,float y,float h,float margin)
  float distance=segment_box_d2(px,py,qx,qy,(body[0]+body[1])*.5f+margin,(body[2]+body[3])*.5f+margin);
  return distance<=raw_radius*raw_radius+1e-8f;
 }
-bool nav_map_footprint(float lx,float ly,float h,float margin)
+const char *nav_map_footprint_blocker(float lx,float ly,float h,float margin)
 {
- if(!isfinite(lx)||!isfinite(ly)||!isfinite(h)||!isfinite(margin)||margin<0)return false;
- if(!nav_lidar_plan_clear(lx,ly,h,nav_lidar_plan_token()?fmaxf(margin,.03f):margin))return false;
+ if(!isfinite(lx)||!isfinite(ly)||!isfinite(h)||!isfinite(margin)||margin<0)return "invalid_pose";
+ if(!nav_lidar_plan_clear(lx,ly,h,nav_lidar_plan_token()?fmaxf(margin,.03f):margin))return "lidar";
  float x=2.25f-lx,y=2.25f-ly,c=cosf(h),s=sinf(h);
  float ox=(body[0]-body[1])*.5f,oy=(body[2]-body[3])*.5f;
  float cx=x-c*ox+s*oy,cy=y-s*ox-c*oy;
  float a=(body[0]+body[1])*.5f,b=(body[2]+body[3])*.5f;
  float hx=a*fabsf(c)+b*fabsf(s),hy=a*fabsf(s)+b*fabsf(c);
- if(cx-hx<-.0001f||cx+hx>2.4001f||cy-hy<-.0001f||cy+hy>2.4001f)return false;
- if(touches_raw_fixture(x,y,h,margin))return false;
+ if(cx-hx<-.0001f||cx+hx>2.4001f||cy-hy<-.0001f||cy+hy>2.4001f)return "field_outline";
+ if(touches_raw_fixture(x,y,h,margin))return "raw_turntable";
+ for(unsigned k=0;k<2;k++){
+  const float *region=work_regions[k];
+  if(intersects(x,y,h,margin,region[0],region[1],region[2],region[3]))
+   return k?"storage_region":"rough_region";
+ }
  for(unsigned i=0;i<2;i++)for(unsigned j=0;j<2;j++)
-  if(intersects(x,y,h,margin,.775f+.85f*i,.775f+.85f*j,.225f,.225f))return false;
+  if(intersects(x,y,h,margin,.775f+.85f*i,.775f+.85f*j,.225f,.225f))return "yellow_region";
  for(unsigned k=0;k<count;k++){
   unsigned id=obstacle[k].kind==3?(obstacle[k].id-1)/3:obstacle[k].id-1;
   if(obstacle[k].kind==2){
    float qx=coord[id%3],qy=coord[2-id/3];
    float wx=id%3==1?.20f:.275f,wy=id/3==1?.20f:.275f;
-   if(intersects(x,y,h,margin,qx,qy,wx+.025f,wy+.025f))return false;
+   if(intersects(x,y,h,margin,qx,qy,wx+.025f,wy+.025f))return "declared_obstacle";
   }else{
    unsigned u=edge[id][0],v=edge[id][1];float ux=coord[u%3],uy=coord[2-u/3];
    bool horizontal=u/3==v/3;float wx=horizontal?.225f:(u%3==1?.20f:.275f),wy=horizontal?(u/3==1?.20f:.275f):.225f;
@@ -163,9 +170,26 @@ bool nav_map_footprint(float lx,float ly,float h,float margin)
      ry=(lo+hi)*.5f;wy=(hi-lo)*.5f;
     }
    }
-   if(intersects(x,y,h,margin,rx,ry,wx+.025f,wy+.025f))return false;
+   if(intersects(x,y,h,margin,rx,ry,wx+.025f,wy+.025f))return "declared_obstacle";
   }
- }return true;
+ }return NULL;
+}
+bool nav_map_footprint(float x,float y,float h,float margin)
+{return nav_map_footprint_blocker(x,y,h,margin)==NULL;}
+
+bool nav_map_work_span(const NavMapNode *dock)
+{
+ float c=cosf(dock->h),s=sinf(dock->h);
+ for(int offset=-150;offset<=150;offset+=5){
+  float d=offset*.001f,x=dock->x+c*d,y=dock->y+s*d;
+  const char *block=nav_map_footprint_blocker(x,y,dock->h,.020f);
+  if(!block)continue;
+  nav_logf("[WORK_SPAN_BLOCKED] station=%u offset_mm=%d local_mm=%d,%d source=%s\r\n",
+    dock->stop,offset,(int)lroundf(x*1000),(int)lroundf(y*1000),block);
+  if(!strcmp(block,"lidar"))nav_lidar_plan_blockers(x,y,dock->h,.03f,false);
+  return false;
+ }
+ return true;
 }
 static bool add(NavMapNode *p,unsigned *n,float x,float y,float h,unsigned stop)
 {
@@ -174,14 +198,17 @@ static bool add(NavMapNode *p,unsigned *n,float x,float y,float h,unsigned stop)
  p[(*n)++]=(NavMapNode){x,y,h,stop};return true;
 }
 static int work_index(unsigned n){return n==1?0:n==7?1:n==3?2:-1;}
-static float jx(unsigned n){int k=work_index(n);return 2.25f-coord[n%3]+(k>=0?offsets[k][0]:0);}
-static float jy(unsigned n){int k=work_index(n);float y=2.25f-coord[2-n/3];return y+(k>=0?offsets[k][1]:(n==0||n==2?.050f:0));}
+/* The 150 mm work strip plus the chassis side and 35 mm of clearance.
+ * Preserve the taught offset along the row. Clamp only the approach normal. */
+static float work_normal_limit(void){return 2.25f-(.150f+body[3]+.035f);}
+static float jx(unsigned n){int k=work_index(n);float x=2.25f-coord[n%3]+(k>=0?offsets[k][0]:0);return n==3?fminf(x,work_normal_limit()):x;}
+static float jy(unsigned n){int k=work_index(n);float y=2.25f-coord[2-n/3]+(k>=0?offsets[k][1]:(n==0||n==2?.050f:0));return n==7?fminf(y,work_normal_limit()):y;}
 /* Travel junctions and taught work docks are different objects. In particular,
  * the raw dock has19mm platter clearance and cannot be a through-road turn.
  * Upper travel usesN.y=200mm; rotations use a verified275mm clearance bay.
- * Taught dock goals above remain byte-for-byte unchanged. */
-static float graph_x(unsigned n){return 2.25f-coord[n%3];}
-static float graph_y(unsigned n){float y=2.25f-coord[2-n/3];return y+(n==1?.075f:(n==0||n==2?.050f:0));}
+ * Shift work-side junctions inboard so the graph can reach the docks. */
+static float graph_x(unsigned n){float x=2.25f-coord[n%3];return n==3?fminf(x,1.915f):x;}
+static float graph_y(unsigned n){float y=2.25f-coord[2-n/3];return n==7?fminf(y,1.915f):y+(n==1?.075f:(n==0||n==2?.050f:0));}
 static bool blended_edge(const NavMapNode *a,const NavMapNode *b,float h0,float h1)
 {
  float l=hypotf(a->x-b->x,a->y-b->y),d=atan2f(sinf(h1-h0),cosf(h1-h0));
@@ -357,9 +384,12 @@ bool nav_map_arm_safe(float lx,float ly,float h,float radius,float ox,float oy)
  float x=2.25f-lx-cosf(h)*ox+sinf(h)*oy,y=2.25f-ly-sinf(h)*ox-cosf(h)*oy;
  radius+=.015f;
  if(x-radius<0||x+radius>2.4f||y-radius<0||y+radius>2.4f)return false;
- /* Full horizontal arm sweep at the already taught transport clearance.
-  * Work-fixture overflight is the same as the verified parked arm cycle;
-  * yellow blocks, pole ROIs and field outline remain independent guards. */
+ /* This sweep is checked while the chassis moves. Parked arm jobs use
+  * their own taught motion and may reach into the target work area. */
+ for(unsigned k=0;k<2;k++){
+  const float *region=work_regions[k];
+  if(circle_box(x,y,radius,region[0],region[1],region[2],region[3]))return false;
+ }
  for(unsigned i=0;i<2;i++)for(unsigned j=0;j<2;j++)if(circle_box(x,y,radius,.775f+.85f*i,.775f+.85f*j,.225f,.225f))return false;
  for(unsigned k=0;k<count;k++){
   unsigned id=obstacle[k].kind==3?(obstacle[k].id-1)/3:obstacle[k].id-1;
@@ -476,20 +506,18 @@ bool nav_map_detour(NavMapNode *out,unsigned *count_out,const NavMapNode *start,
   NavMapNode goal=goals[leg];
   if(!isfinite(goal.x)||!isfinite(goal.y)||!isfinite(goal.h)||!goal.stop){*why="invalid detour task goal";return false;}
   if(goal.stop==9){
-   /* QR placement is specified as a100mm interval either side of nominal.
-    * Choose the closest observation pivot within75mm, not a larger guard
-    * relaxation. This accommodates a real pole near one end of the dock. */
-   static const float offsets_y[]={0,.025f,-.025f,.050f,-.050f,.075f,-.075f};
+   static const float oy[]={0,.025f,-.025f,.050f,-.050f,.075f,-.075f};
+   static const float ox[]={0,.025f,.050f,.075f,.100f};
    bool found=false;
-   for(unsigned option=0;option<sizeof offsets_y/sizeof offsets_y[0];option++){
-    float y=jy(5)+offsets_y[option];bool clear=true;
-    for(unsigned q=0;q<4;q++){
-     NavMapNode a={goal.x,y,goal.h+q*PI*.5f,0},b={goal.x,y,goal.h+(q+1)*PI*.5f,0};
-     if(!detour_edge(&a,&b)){clear=false;break;}
+   for(unsigned ix=0;ix<5&&!found;ix++)for(unsigned iy=0;iy<7;iy++){
+    float x=goal.x+ox[ix],y=jy(5)+oy[iy];
+    if(nav_map_footprint(x,y,goal.h,.03f)){
+     goal.x=x;goal.y=y;found=true;
+     if(ix||iy)nav_logf("[QR_DOCK] inward_mm=%d offset_y_mm=%d; final pose and actual approach checked, NO360 pivot\r\n",(int)(ox[ix]*1000),(int)(oy[iy]*1000));
+     break;
     }
-    if(clear){goal.y=y;found=true;if(option)nav_logf("[QR_DOCK] offset_y_mm=%d; same map frame; full turn footprint verified\r\n",(int)roundf(offsets_y[option]*1000));break;}
    }
-   if(!found){*why="QR observation turn footprint blocked";*count_out=0;return false;}
+   if(!found){*why="QR dock final footprint blocked";*count_out=0;return false;}
   }
   NavMapNode p[N];p[0]=from;p[10]=goal;
   for(unsigned j=0;j<9;j++)p[j+1]=(NavMapNode){graph_x(j),graph_y(j),0,0};
@@ -560,17 +588,15 @@ bool nav_map_detour(NavMapNode *out,unsigned *count_out,const NavMapNode *start,
   }
   if(!out[*count_out-1].stop)out[*count_out-1].stop=goal.stop;
   if(goal.stop==9){
-   /* Front150deg alone cannot see all field roads from one docked heading.
-    * One complete observation turn at the wide QR dock ends at the SAME
-    * physical heading. The last point alone is a task stop; no extra task
-    * or origin reset is introduced. Every quadrant uses the full body test. */
-   out[*count_out-1].stop=0;
-   for(unsigned q=1;q<=4;q++){
-    NavMapNode a={goal.x,goal.y,goal.h+(q-1)*PI*.5f,0};
-    NavMapNode b={goal.x,goal.y,goal.h+q*PI*.5f,q==4?9U:0U};
-    if(!detour_edge(&a,&b)){*why="QR observation turn footprint blocked";*count_out=0;return false;}
-    if(!detour_add(out,count_out,b.x,b.y,b.h,b.stop)){*why="QR observation node capacity";return false;}
-   }
+   /* Do not insert four same-position 90-degree pivots here. The physical
+    * QR board/支架 and nearby obstacles can make that pivot footprint
+    * unreachable, and the user explicitly requested move-and-scan instead of
+    * a stop-and-spin. The QR approach remains a normal moving approach; lidar
+    * accumulation is active during the approach and the CAI freeze happens
+    * at the actual QR stop. A true circular observation must be a separately
+    * validated trajectory, not a hidden pivot at the dock. */
+   out[*count_out-1].stop=9;
+   nav_logf("[QR_APPROACH_SCAN] no stationary 4x90 pivot; collect QR anchors during approach, stop only at dock\r\n");
   }
   from=goal;
  }
@@ -591,6 +617,10 @@ bool nav_map_fixture_core(float lx,float ly,float inset){
 bool nav_map_static_covered(float lx,float ly,float r){
  if(!isfinite(lx)||!isfinite(ly)||!isfinite(r)||r<=0)return false;
  float x=2.25f-lx,y=2.25f-ly;
+ for(unsigned k=0;k<2;k++){
+  const float *region=work_regions[k];
+  if(fabsf(x-region[0])+r<=region[2]&&fabsf(y-region[1])+r<=region[3])return true;
+ }
  for(unsigned i=0;i<2;i++)for(unsigned j=0;j<2;j++){
   float ax=.55f+.85f*i,ay=.55f+.85f*j;
   if(x-r>=ax&&x+r<=ax+.45f&&y-r>=ay&&y+r<=ay+.45f)return true;
@@ -614,4 +644,17 @@ bool nav_map_qr_path(NavMapNode *out,unsigned *n,const char **why){
  NavMapNode from={start_pose[0],start_pose[1],start_pose[2],0};
  NavMapNode qr={jx(5),jy(5),PI*.5f,9};
  return nav_map_detour(out,n,&from,&qr,1,why);
+}
+bool nav_map_after_qr_path(NavMapNode *out,unsigned *n,const NavMapNode *start,const char **why){
+ return nav_map_official_path(out,n,start,0,false,why);
+}
+bool nav_map_official_path(NavMapNode *out,unsigned *n,const NavMapNode *start,unsigned home,bool park_only,const char **why){
+ NavMapNode goals[8];unsigned count=0;const unsigned visits[6]={1,7,3,1,7,3};
+ for(unsigned i=0;!park_only&&i<6;i++){
+  unsigned h=i==1||i==4?2:i==2||i==5?1:0;
+  goals[count++]=(NavMapNode){jx(visits[i]),jy(visits[i]),h*PI*.5f,i+1};
+ }
+ if(!home&&!direct_home)goals[count++]=(NavMapNode){.020f,2.080f,0,7};
+ goals[count++]=(NavMapNode){.020f,home==2?2.080f:.020f,0,8};
+ return nav_map_detour(out,n,start,goals,count,why);
 }

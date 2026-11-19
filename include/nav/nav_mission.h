@@ -9,4 +9,7 @@ unsigned nav_mission_indexing_mode(void);
 unsigned nav_mission_index_accel(void);
 unsigned nav_mission_index_jerk(void);
 bool nav_mission_work_pose(void);
+unsigned nav_mission_home(bool *park_only);
+void nav_mission_select_park(void);
+bool nav_mission_owns_vision(void);
 #endif

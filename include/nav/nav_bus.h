@@ -7,10 +7,13 @@ typedef struct {
  uint8_t flags[4],stop_ack,disable_ack;bool stopping,transaction,tx_fault;
  uint32_t rx_resyncs,lift_errors,lift_timeouts;
  bool lift_stop_ack;
+ bool rack_seen,rack_stop_ack;
+ uint32_t rack_timeouts;
 } NavBus;
 bool nav_bus_lift_submit(const uint8_t *,unsigned);
 void nav_bus_lift_cancel_read(void);
 bool nav_bus_lift_idle(void);
+bool nav_bus_rack_read(uint8_t opcode);
 void nav_bus_init(uint32_t now);
 void nav_bus_tick(uint32_t now);
 void nav_bus_feed(uint8_t byte,uint32_t at);

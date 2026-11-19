@@ -22,3 +22,15 @@ bool nav_lidar_start_ready(uint32_t now,uint32_t since);
 bool nav_lidar_avoid_ready(uint32_t now);
 bool nav_lidar_hazard(uint32_t now,const NavPose *pose);
 const char *nav_lidar_hazard_cause(void);
+/* QR-catalog hooks: request a stationary anchor snapshot and enable the
+ * existing >=3-anchor fused-XY correction without accepting arbitrary config
+ * while the chassis is moving. Returns false when not configured/not ready. */
+bool nav_lidar_qr_anchor_request(void);
+unsigned nav_lidar_qr_anchor_count(void);
+bool nav_lidar_qr_fusion_enable(void);
+void nav_lidar_fusion_report(unsigned station);
+void nav_lidar_qr_anchor_reset(void);
+void nav_lidar_qr_anchor_begin(void);
+void nav_lidar_qr_anchor_end(void);
+void nav_lidar_qr_context(bool near);
+uint32_t nav_lidar_last_scan_ms(void);

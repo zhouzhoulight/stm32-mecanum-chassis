@@ -10,6 +10,7 @@
 #include "nav/nav_route.h"
 #include "nav/nav_map.h"
 #include "nav/nav_arm.h"
+#include "nav/nav_arm2.h"
 #include "nav/nav_vision.h"
 #include "nav/nav_mission.h"
 #include "wit_imu.h"
@@ -23,6 +24,8 @@
 static unsigned phase,algorithm,ceiling;
 static bool avoid_enabled,replan_busy,route_from_lidar,replan_plan_ready,survey_route;
 static bool qr_catalog_transition;
+static bool qr_anchor_requested;
+static bool qr_anchor_accumulating;
 static unsigned detours;
 static uint32_t replan_at,latest_tick,replan_finished,replan_cycles,lidar_start_since;
 bool nav_app_replanning(void){return replan_busy&&phase==7;}
@@ -52,6 +55,7 @@ static bool wheel_guard_strict;
 static uint8_t wheel_rej_bits;
 static uint32_t wheel_rej_since,wheel_amb_since,wheel_log_at;
 static uint32_t traction_at;
+static uint32_t traction_update_at;
 static float traction_scale=1;
 float nav_app_traction_scale(void){return traction_scale;}
 static const char *reason="none";
@@ -86,10 +90,20 @@ static const NavPose *pose(void){const NavOdom *o=nav_odom_data();return fused?&
 unsigned nav_app_state(void){return phase;}
 bool nav_app_indexing(void){return work_translation&&phase>0&&phase<6;}
 bool nav_app_segmented(void){return segmented;}
+bool nav_app_official_plan_ready(void)
+{return route.ready&&route.n>1&&route_from_lidar&&avoid_enabled&&!survey_route&&route.p[route.n-1].stop==9;}
 void nav_app_pose(float out[3]){out[0]=pose()->x_m;out[1]=pose()->y_m;out[2]=nav_odom_heading_now();}
 unsigned nav_app_work_station(void){return phase==0&&segmented&&route.waiting&&!route.finished?route.station:0;}
 bool nav_app_station_target(float out[3])
 {if(!nav_app_work_station())return false;out[0]=route.p[route.index].x;out[1]=route.p[route.index].y;out[2]=route.p[route.index].h;return true;}
+bool nav_app_work_clear(float x,float y)
+{
+ float center[3];if(!nav_app_station_target(center)||route.station==9||hypotf(x-center[0],y-center[1])>.18f)return false;
+ float sx=pose()->x_m,sy=pose()->y_m,yaw=nav_odom_heading_now();
+ unsigned n=(unsigned)ceilf(hypotf(x-sx,y-sy)/.005f)+1;
+ for(unsigned k=0;k<=n;k++)if(!nav_route_footprint(sx+(x-sx)*k/n,sy+(y-sy)*k/n,yaw,.015f))return false;
+ return true;
+}
 bool nav_app_upcoming(float out[3],unsigned *station,float *remaining)
 {
  if(!routing||!nav_app_active()||route.finished)return false;
@@ -141,10 +155,11 @@ void nav_app_init(uint32_t now)
 {
  avoid_enabled=replan_busy=route_from_lidar=replan_plan_ready=survey_route=false;detours=0;latest_tick=now;
  qr_catalog_transition=false;
+ qr_anchor_requested=false;qr_anchor_accumulating=false;
  routing=preflight_only=false;memset(&route,0,sizeof route);calibrating=segmented=work_translation=false;station_stage=0;route_wait_ms=0;wait_at=now;blending=false;blend_time=0;turning=false;turn_target=turn_last_error=turn_wheel=0;turn_stable=0;phase=0;algorithm=STUDIO_ALGORITHM;ceiling=STUDIO_ROUTE_RPM;fused=STUDIO_FUSED;xy=false;preparation_disabled=false;b0_ratio=1;reason="none";
  heading_reference=0;control_max=odom_max=bus_max=loop_max=0;last_log=now;zero_ack_at=0;
  wheel_guard_strict=false;wheel_rej_bits=0;wheel_rej_since=wheel_amb_since=wheel_log_at=0;
- traction_at=0;traction_scale=1;
+ traction_at=0;traction_scale=1;traction_update_at=now;
  nav_odom_init();imu_init();imu_service_init();nav_bus_init(now);
  nav_log("\r\n[BOOT] " NAV_VERSION " HSE25MHz F407VE168MHz; SHARED Emm1..5; PC6..PC9 PWM OFF; boot FE all +disable WHEELS only; no auto motion\r\n");
  nav_log("help | status | origin | algorithm cascade/adrc/lqr/mpc | run forward/back/left/right mm rpm | !\r\n");
@@ -156,7 +171,9 @@ static void begin(float x,float y,unsigned rpm,uint32_t now,unsigned kind,float 
  const NavOdom *o=nav_odom_data();const NavBus *b=nav_bus_data();const WitImu *i=imu_data();
  float length=rotation?fabsf(wrapped(angle-nav_odom_heading_now()))*o->lever_m:hypotf(x-pose()->x_m,y-pose()->y_m);
  if(route_request)length=route.length;
- unsigned minimum=work_request?30:(rpm>=100?1800:rpm>=75?800:rpm>=50?1200:rpm>=30?800:rpm>=20?400:50);
+ /* A sampled route already owns its acceleration and speed limits. The
+  * single-leg bench minimum must not reject a shorter QR-only survey. */
+ unsigned minimum=route_request?5:work_request?8:(rpm>=100?1800:rpm>=75?800:rpm>=50?1200:rpm>=30?800:rpm>=20?400:50);
  if(nav_arm_busy()){nav_log("[E] finish arm/lift activity before driving\r\n");return;}
  if(((route_request&&segmented)||work_request)&&!nav_arm_transport_ready()&&!(work_request&&nav_mission_work_pose())){nav_log("[E] transport requires referenced lift at clearance and turn1000; no travel\r\n");return;}
  nav_arm_suspend_reads();
@@ -186,7 +203,11 @@ static void begin(float x,float y,unsigned rpm,uint32_t now,unsigned kind,float 
 }
 void nav_app_command(const char *input,uint32_t now)
 {
- if(!strncmp(input,"vision",6)){if(!nav_vision_command(input,now))nav_log("[E] unknown vision command\r\n");return;}
+ if(!strncmp(input,"vision",6)){
+  if(nav_mission_owns_vision())nav_log("[VISION_BUSY] official mission owns camera requests\r\n");
+  else if(!nav_vision_command(input,now))nav_log("[E] unknown vision command\r\n");
+  return;
+ }
  char normalized[100];
  if(!normalize_command(input,normalized)){nav_log("[E] invalid/oversized command or integer overflow\r\n");return;}
  input=normalized;
@@ -204,6 +225,7 @@ void nav_app_command(const char *input,uint32_t now)
   route.manual=false;route.waiting=false;nav_log("[ROUTE_RESUMED] same trajectory/frame\r\n");return;
  }
  if(nav_mission_command(input,now))return;
+ if(nav_arm2_command(input))return;
  if(nav_arm_command(input))return;
 
  const char *line=normalized;
@@ -259,7 +281,8 @@ void nav_app_command(const char *input,uint32_t now)
   const NavOdom *q=nav_odom_data();
   uint32_t cycles=nav_hw_cycles();
   nav_map_plan_start(pose()->x_m,pose()->y_m,nav_odom_heading_now());
-  bool ok=survey_request?nav_route_plan_qr(&route,(unsigned)a,q->ppm_x,q->ppm_y,q->lever_m):sensed?nav_route_plan_sensed(&route,(unsigned)a,q->ppm_x,q->ppm_y,q->lever_m):nav_route_plan(&route,(unsigned)a,q->ppm_x,q->ppm_y,q->lever_m);
+   bool qr_first=sensed&&nav_map_qr_enabled()&&!calibrating;
+   bool ok=survey_request||qr_first?nav_route_plan_qr(&route,(unsigned)a,q->ppm_x,q->ppm_y,q->lever_m):sensed?nav_route_plan_sensed(&route,(unsigned)a,q->ppm_x,q->ppm_y,q->lever_m):nav_route_plan(&route,(unsigned)a,q->ppm_x,q->ppm_y,q->lever_m);
   survey_route=survey_request&&ok;
   route_from_lidar=sensed&&ok;
   cycles=nav_hw_cycles()-cycles;nav_logf("[ROUTE_PLAN_PERF] cycles=%lu; 168cycles/us on F407; no hardware measurement on a desktop build\r\n",(unsigned long)cycles);
@@ -278,7 +301,7 @@ void nav_app_command(const char *input,uint32_t now)
  if(!strcmp(line,"wheel guard strict")||!strcmp(line,"wheel guard distributed")){
   wheel_guard_strict=!strcmp(line,"wheel guard strict");
   wheel_rej_bits=0;wheel_rej_since=0;wheel_amb_since=0;wheel_log_at=0;slip_since=0;
-  traction_at=0;traction_scale=1;
+  traction_at=0;traction_scale=1;traction_update_at=now;
   nav_logf("[WHEEL_GUARD] mode=%s; RAM only; %s\r\n",wheel_guard_strict?"strict":"distributed",
    wheel_guard_strict?"v2.7.13 semantics: any rejected/ambiguous mask >500ms stops":
    "statistical rejection logs +65% reference clock, recover after1s clear; hardware/feedback guards unchanged");return;
@@ -303,15 +326,30 @@ void nav_app_command(const char *input,uint32_t now)
  if(!strcmp(line,"route continue")){
   if((route_from_lidar||avoid_enabled)&&(!avoid_enabled||!nav_lidar_avoid_ready(now)||!nav_arm_transport_ready())){nav_log("[E] sensed continue requires fresh lidar and transport clearance; NO travel\r\n");return;}
   if(!segmented||calibrating||!nav_app_work_station()||!route.ready||route.map_generation!=nav_map_generation()||hypotf(pose()->x_m-route.p[route.index].x,pose()->y_m-route.p[route.index].y)>.02f||fabsf(wrapped(nav_odom_heading_now()-route.p[route.index].h))>.0174533f){nav_log("[E] continue requires ready parked task center within20mm/1deg\r\n");return;}
-  begin(0,0,route.max_rpm,now,3,0);if(phase==1)route.waiting=false;return;
+  begin(0,0,route.max_rpm,now,3,0);
+  if(phase==1){
+   route.waiting=false;
+   if(route.station==9&&route_from_lidar&&!survey_route&&!nav_lidar_map_frozen()){
+    qr_catalog_transition=true;
+    qr_anchor_requested=false;
+   }
+  }
+  return;
  }
  if(!strcmp(line,"route start")||!strcmp(line,"route preflight")){
   preflight_only=!strcmp(line,"route preflight");
-  if((route_from_lidar||avoid_enabled)&&(!avoid_enabled||!nav_lidar_avoid_ready(now)||!nav_arm_transport_ready())){nav_log("[E] sensed route needs avoid on, fresh lidar and arm referenced at transport clearance; NO travel\r\n");return;}
+  bool start_laser_ready=nav_lidar_avoid_ready(now);
+  bool start_arm_ready=nav_arm_transport_ready();
+  if((route_from_lidar||avoid_enabled)&&(!avoid_enabled||!start_laser_ready||!start_arm_ready)){
+   nav_logf("[START_GATE] route_from_lidar=%u avoid=%u lidar_ready=%u lidar_fresh=%u arm_ready=%u phase=%u route_ready=%u scan_age=%u px=%d py=%d\r\n",
+    route_from_lidar,avoid_enabled,start_laser_ready,nav_lidar_fresh(now),start_arm_ready,
+    phase,route.ready,(unsigned)(now-nav_lidar_last_scan_ms()),(int)roundf(pose()->x_m*1000),(int)roundf(pose()->y_m*1000));
+   nav_log("[E] sensed route needs avoid on, fresh lidar and arm referenced at transport clearance; NO travel\r\n");return;
+  }
   if(algorithm==3){nav_log("[E] route MPC not released: moving-reference integration test exceeded tracking envelope; use line tests only\r\n");return;}
   if(route.map_generation!=nav_map_generation()){nav_log("[E] map/footprint changed; plan again\r\n");return;}
   if(segmented&&calibrating){nav_log("[E] select segmented OR manual calibration mode\r\n");return;}
-  route.manual=calibrating||segmented;station_stage=0;wait_at=now;detours=0;qr_catalog_transition=false;
+  route.manual=calibrating||segmented;station_stage=0;wait_at=now;detours=0;qr_catalog_transition=false;qr_anchor_requested=false;qr_anchor_accumulating=false;nav_lidar_qr_context(false);nav_lidar_qr_anchor_reset();
   if(!route.ready||route.index||route.elapsed||algorithm>3||!xy||ceiling<route.max_rpm||hypotf(pose()->x_m-route.p[0].x,pose()->y_m-route.p[0].y)>.020f||fabsf(wrapped(nav_odom_heading_now()-route.p[0].h))>.0174533f){nav_log("[E] route requires new valid plan, selected controller+xy, sufficient limit, known zone1 WEST origin within20mm/1deg\r\n");return;}
   if(!nav_route_controller(&route,algorithm,b0_ratio)){nav_log("[E] route controller configuration invalid\r\n");return;}
   nav_logf("[ROUTE_CONTROLLER] %s; common trajectory/feedforward/allocator and station settler; moving feedback selected\r\n",names[algorithm]);
@@ -330,7 +368,15 @@ void nav_app_command(const char *input,uint32_t now)
   float target[3];
   if(!nav_app_station_target(target)||route.station==9||hypotf(a*.001f-target[0],b*.001f-target[1])>.18f){nav_log("[E] work move must remain within180mm of a parked task center\r\n");return;}
   float x=pose()->x_m,y=pose()->y_m;unsigned steps=(unsigned)ceilf(hypotf(a*.001f-x,b*.001f-y)/.005f)+1;
-  for(unsigned j=0;j<=steps;j++)if(!nav_route_footprint(x+(a*.001f-x)*j/steps,y+(b*.001f-y)*j/steps,nav_odom_heading_now(),.015f)){nav_log("[E] work line footprint intersects map\r\n");return;}
+  float yaw=nav_odom_heading_now();
+  for(unsigned j=0;j<=steps;j++){
+   float sx=x+(a*.001f-x)*j/steps,sy=y+(b*.001f-y)*j/steps;
+   const char *block=nav_map_footprint_blocker(sx,sy,yaw,.015f);
+   if(!block)continue;
+   nav_logf("[WORK_PATH_BLOCKED] station=%u start_mm=%d,%d target_mm=%d,%d sample_mm=%d,%d sample=%u/%u margin_mm=15 source=%s\r\n",route.station,mm(x),mm(y),a,b,mm(sx),mm(sy),j,steps,block);
+   if(!strcmp(block,"lidar"))nav_lidar_plan_blockers(sx,sy,yaw,.015f,true);
+   nav_log("[E] work line footprint intersects map\r\n");return;
+  }
   begin(a*.001f,b*.001f,rpm,now,4,0);return;
  }
  n=0;if(sscanf(line,"adrc b0 %d %n",&a,&n)==1&&n>0&&!line[n]&&a>=500&&a<=2000){b0_ratio=a*.001f;nav_log("[ADRC] b0 ratio set; no move\r\n");return;}
@@ -367,8 +413,26 @@ bool nav_app_wheel_guard(uint32_t now,uint8_t rejected,uint8_t ambiguous,unsigne
   else slip_since=0;
   return false;
  }
- if(rejected||ambiguous){traction_at=now;traction_scale=.65f;}
- else if((uint32_t)(now-traction_at)>=1000U)traction_scale=1;
+ if(rejected||ambiguous){
+  traction_at=now;
+  /* Do not slam the common speed reference between 1.00 and 0.65: the
+   * resulting one-second surge/hesitation is visible as a lurch. Ramp the
+   * existing route-speed scale at <=0.8/s; safety decisions and individual
+   * wheel limits are unchanged. Ambiguous-only evidence gets a gentler cap. */
+  float target=rejected?.70f:.88f;
+  uint32_t dt_ms=traction_update_at?now-traction_update_at:20U;
+  if(dt_ms>100U)dt_ms=100U;
+  float step=.0008f*(float)dt_ms;
+  if(traction_scale>target)traction_scale=fmaxf(target,traction_scale-step);
+  traction_update_at=now;
+ }else{
+  uint32_t dt_ms=traction_update_at?now-traction_update_at:20U;
+  if(dt_ms>100U)dt_ms=100U;
+  float step=.0008f*(float)dt_ms;
+  if(traction_scale<1)traction_scale=fminf(1,traction_scale+step);
+  traction_update_at=now;
+  if((uint32_t)(now-traction_at)>=1000U)traction_scale=1;
+ }
  if(rejected){
   uint8_t bits=wheel_rej_bits?(uint8_t)(wheel_rej_bits&rejected):rejected;
   if(!bits){ /* mask rotated to a disjoint subset: new window, no emergency */
@@ -389,16 +453,65 @@ bool nav_app_wheel_guard(uint32_t now,uint8_t rejected,uint8_t ambiguous,unsigne
  }else wheel_amb_since=0;
  if((rejected||ambiguous)&&now-wheel_log_at>=1000U){
   wheel_log_at=now;
-  nav_logf("[WHEEL_SLIP] rej=%02X amb=%02X pairs=%u maxR=%ld distributed; no emergency; reference=650permille\r\n",
-   rejected,ambiguous,pairs,(long)lroundf(max_ratio));
+  nav_logf("[WHEEL_SLIP] rej=%02X amb=%02X pairs=%u maxR=%ld distributed; no emergency; reference=%upermille\r\n",
+   rejected,ambiguous,pairs,(long)lroundf(max_ratio),(unsigned)roundf(traction_scale*1000));
  }
  return false;
+}
+/* QR observation accumulation is enabled only near the QR stop, while the
+ * 4x90 observation turn is running. It must stop before phase7 so the frozen
+ * transition sees the accumulated set, not a fresh empty scan. */
+static bool qr_dock_near(void)
+{
+ if(segmented&&route.waiting&&route.station==9&&route_from_lidar&&!nav_lidar_map_frozen()&&phase==0)return true;
+ if(!nav_map_qr_enabled()||!route_from_lidar||!routing||phase==7)return false;
+ for(unsigned k=route.index;k<route.n;k++)if(route.p[k].stop==9U){
+  return hypotf(pose()->x_m-route.p[k].x,pose()->y_m-route.p[k].y)<1.00f;
+ }
+ return false;
+}
+static void qr_anchor_service(void)
+{
+ bool near=qr_dock_near();
+ nav_lidar_qr_context(near);
+ if(near&&!qr_anchor_accumulating){
+  nav_lidar_qr_anchor_begin();qr_anchor_accumulating=true;
+  nav_log("[CATALOG_ANCHOR_ACCUM] begin; collect qualified returns across QR observation headings\r\n");
+ }else if(!near&&qr_anchor_accumulating){
+  nav_lidar_qr_anchor_end();qr_anchor_accumulating=false;
+  nav_logf("[CATALOG_ANCHOR_ACCUM] end; unique_anchors=%u\r\n",nav_lidar_qr_anchor_count());
+ }
+}
+/* Only discard a translation reference already passed on this local straight.
+ * Bound the search to 150 mm, 40 mm cross-track and 10 degrees; never cross an
+ * unserved station or a turn. Current-body clearance is checked independently.
+ * Do not modify the controller's time/index or the navigation coordinate frame. */
+static unsigned forward_hazard_sample(const NavPose *p)
+{
+ unsigned first=route.index;
+ for(unsigned k=route.index;k+1<route.n;k++){
+  const NavRoutePoint *a=route.p+k,*b=a+1;
+  if(b->s-route.p[route.index].s>.15f||(a->stop&&route.station!=a->stop))break;
+  float dx=b->x-a->x,dy=b->y-a->y,len2=dx*dx+dy*dy;
+  if(len2<.00000001f)break;
+  float ah=atan2f(sinf(p->yaw_rad-a->h),cosf(p->yaw_rad-a->h));
+  float bh=atan2f(sinf(b->h-a->h),cosf(b->h-a->h));
+  if(fabsf(ah)>.17453293f||fabsf(bh)>.017453293f)break;
+  float t=((p->x_m-a->x)*dx+(p->y_m-a->y)*dy)/len2;
+  if(t<=0)break;
+  float q=fminf(t,1.0f),ex=p->x_m-a->x-q*dx,ey=p->y_m-a->y-q*dy;
+  if(ex*ex+ey*ey>.04f*.04f)break;
+  first=k+1;
+  if(t<1.0f||b->stop)break;
+ }
+ return first;
 }
 void nav_app_tick(uint32_t now)
 {
  latest_tick=now;
  uint32_t start=nav_hw_cycles(),t=start;nav_odom_tick(now);uint32_t elapsed=nav_hw_cycles()-t;if(elapsed>odom_max)odom_max=elapsed;
  nav_lidar_departure(routing&&!route.station&&route.index<route.n&&route.p[route.index].s<.30f);
+ qr_anchor_service();
  imu_service_tick(now);nav_vision_tick(now);nav_lidar_tick(now,fused,(imu_data()->gyro_seen&&now-imu_data()->gyro_at<300)?imu_data()->z_mdps*.00001745329252f:NAN);
 
  if(routing&&route.waiting){route_wait_ms+=now-wait_at;}wait_at=now;
@@ -411,13 +524,16 @@ void nav_app_tick(uint32_t now)
   bool hazard=!waiting_laser&&nav_lidar_hazard(now,pose());unsigned hazard_path=route.n;
   if(!hazard&&avoid_enabled&&routing&&phase==4&&!route.waiting){
    float speed=hypotf(pose()->vx_mps,pose()->vy_mps),look=.20f+.30f*speed+speed*speed;
-   for(unsigned k=route.index;k<route.n&&route.p[k].s-route.p[route.index].s<=look;k++)
-    if(nav_lidar_map_frozen()?!nav_lidar_map_safe(route.p[k].x,route.p[k].y,route.p[k].h,.03f):!nav_lidar_clear(route.p[k].x,route.p[k].y,route.p[k].h,.03f)){hazard=true;hazard_path=k;break;}
+   unsigned first=forward_hazard_sample(pose());
+   for(unsigned k=first;k<route.n&&route.p[k].s-route.p[route.index].s<=look;k++)
+    if(!nav_lidar_clear(route.p[k].x,route.p[k].y,route.p[k].h,.03f)){hazard=true;hazard_path=k;break;}
   }
   if(hazard){
    nav_logf("[HAZARD_CAUSE] class=%s sample=%u catalog_frozen=%u\r\n",hazard_path<route.n?"remaining_path":nav_lidar_hazard_cause(),hazard_path,nav_lidar_map_frozen());
    if(hazard_path<route.n)nav_lidar_plan_blockers(route.p[hazard_path].x,route.p[hazard_path].y,route.p[hazard_path].h,.03f,true);
-    nav_lidar_capture_hazard(now,pose());
+   else if(!strcmp(nav_lidar_hazard_cause(),"classified_body_overlap"))
+    nav_lidar_plan_blockers(pose()->x_m,pose()->y_m,pose()->yaw_rad,.03f,true);
+   nav_lidar_capture_hazard(now,pose());
    if(survey_route&&routing){nav_app_emergency(now,"QR survey hazard/stale; stop without automatic replan");goto end;}
    if(nav_lidar_map_frozen()){nav_app_emergency(now,"live hazard after QR catalog freeze; no automatic replan");goto end;}
    bool laser_ready=nav_lidar_avoid_ready(now),body_clear=nav_lidar_clear(pose()->x_m,pose()->y_m,pose()->yaw_rad,.005f),wheels_ready=feedback(now,true),arm_held=nav_arm_transport_held();
@@ -437,7 +553,13 @@ void nav_app_tick(uint32_t now)
   if(phase<4 && nav_age(now,phase_at)>5000){nav_app_emergency(now,"preparation timeout");goto end;}
  }
  if(phase==7&&!replan_busy){
-  if(!nav_lidar_avoid_ready(now)||!feedback(now,true)||!nav_arm_transport_held()){
+  bool lidar_ready=nav_lidar_avoid_ready(now);
+  bool feedback_ready=feedback(now,true);
+  bool arm_held=nav_arm_transport_held();
+  bool post_plan_lidar_grace=replan_plan_ready&&!lidar_ready&&(uint32_t)(now-replan_finished)<300U;
+  if((!lidar_ready&&!post_plan_lidar_grace)||!feedback_ready||!arm_held){
+   nav_logf("[DETOUR_GATE] lidar=%u grace=%u feedback=%u arm_held=%u scan_age=%u; fault only after real loss\r\n",
+    lidar_ready,post_plan_lidar_grace,feedback_ready,arm_held,(unsigned)(now-nav_lidar_last_scan_ms()));
    nav_app_emergency(now,"detour feedback/transport/lidar lost");goto end;
   }
   if((!replan_plan_ready&&now-replan_at>5000)||(replan_plan_ready&&now-replan_finished>1500)){
@@ -446,9 +568,16 @@ void nav_app_tick(uint32_t now)
   if(b->velocity_done==zero_generation&&o->quiet>=3&&abs(i->z_mdps)<1000&&hypotf(pose()->vx_mps,pose()->vy_mps)<.003f&&nav_arm_transport_ready()){
    if(!replan_plan_ready){
     if(qr_catalog_transition){
-     if(now-replan_at<1000)goto end;
+     if(!segmented&&now-replan_at<1000)goto end;
+     if(!qr_anchor_requested){
+      qr_anchor_requested=true;
+      nav_logf("[CATALOG_ANCHOR] accumulated=%u during QR approach (points+lines); freeze next\r\n",
+       nav_lidar_qr_anchor_count());
+     }
+     nav_lidar_qr_anchor_end();qr_anchor_accumulating=false;
      nav_lidar_map_freeze(true);
-     nav_logf("[CATALOG_FROZEN] at=qr confirmed=%u; one planned transition; live braking retained\r\n",nav_lidar_map_count());
+     nav_logf("[CATALOG_FROZEN] at=qr confirmed=%u anchors=%u; planning on fixed scene\r\n",
+      nav_lidar_map_count(),nav_lidar_qr_anchor_count());
     }
     replan_busy=true;uint32_t cycles=nav_hw_cycles();
     bool ok=nav_route_replan(&route,pose(),o->ppm_x,o->ppm_y,o->lever_m);
@@ -456,13 +585,16 @@ void nav_app_tick(uint32_t now)
     replan_cycles=nav_hw_cycles()-cycles;now=latest_tick;
     bool still_waiting=phase==7;replan_busy=false;
     if(!still_waiting)goto end;
-    if(!ok||!feedback(now,true)||!nav_lidar_avoid_ready(now)||!nav_arm_transport_held()){
+    if(!ok||!feedback(now,true)||!nav_arm_transport_held()){
      nav_app_emergency(now,ok?"detour post-plan feedback invalid":route.fault);goto end;
     }
     replan_plan_ready=true;replan_finished=now;
     goto end; /* Finish any in-flight read and recheck FRESH arm feedback. */
    }
-   bool catalog=qr_catalog_transition;qr_catalog_transition=false;if(!catalog)detours++;route_wait_ms+=now-replan_at;phase=4;last_control=phase_at=now;replan_plan_ready=false;
+   bool catalog=qr_catalog_transition;
+   if(catalog)nav_logf("[CATALOG_FUSION] at=qr enabled=%u anchors=%u; applied only after planning\r\n",
+     nav_lidar_qr_fusion_enable(),nav_lidar_qr_anchor_count());
+   qr_catalog_transition=false;if(!catalog)detours++;route_wait_ms+=now-replan_at;phase=4;last_control=phase_at=now;replan_plan_ready=false;
    deadline=nav_age(now,run_at)+(uint32_t)(route.duration*2000)+30000;
    nav_logf("[%s] attempt=%u samples=%u completed_station=%u plan_cycles=%lu; fresh transport verified; same origin; no F3/reset\r\n",catalog?"CATALOG_RESUME":"DETOUR_RESUME",detours,route.n,route.station,(unsigned long)replan_cycles);
   }
@@ -496,6 +628,11 @@ void nav_app_tick(uint32_t now)
    if(preflight_only){
     preflight_only=false;routing=false;phase=0;nav_bus_emergency(now);
     nav_log("[PREFLIGHT_DONE] zero-only preparation passed; wheels disable queued; NO nonzero velocity or trajectory executed\r\n");goto end;
+   }
+   if(qr_catalog_transition){
+    phase=7;replan_at=now;replan_plan_ready=false;
+    nav_log("[CATALOG_QR_CONTINUE] QR dwell complete; freeze scene and plan remaining stations\r\n");
+    goto end;
    }
    nav_control_begin(&control,pose(),goal[0],goal[1],requested_rpm,xy);
    nav_control_config(&control,algorithm,o->ppm_x,o->ppm_y,o->lever_m,b0_ratio);control.work_move=work_translation;control.work_mode=nav_mission_indexing_mode();control.work_accel=nav_mission_index_accel()*.001f;control.work_jerk=nav_mission_index_jerk()*.001f;
@@ -559,9 +696,13 @@ void nav_app_tick(uint32_t now)
    control.remaining=route.length-route.p[route.index].s;control.cross_error=route.error_m;
    if(station!=route.station&&route.waiting&&!calibrating&&!segmented)nav_logf("[ROUTE_PAUSED] station=%u; record ground error then route resume\r\n",route.station);
    if(station!=route.station&&route.waiting&&calibrating){station_stage=1;station_at=now;}
-   if(station!=route.station)nav_logf("[STATION] %u %s elapsed_ms=%lu; stopped; no origin reset\r\n",route.station,nav_route_station(route.station),(unsigned long)(route.elapsed*1000));
+   if(station!=route.station){
+    nav_logf("[STATION] %u %s elapsed_ms=%lu; stopped; no origin reset\r\n",route.station,nav_route_station(route.station),(unsigned long)(route.elapsed*1000));
+    nav_lidar_fusion_report(route.station);
+   }
    if(station!=route.station&&route.station==9&&route_from_lidar&&!survey_route&&!segmented&&!calibrating&&!nav_lidar_map_frozen()){
-    zero_generation=nav_bus_velocity((int[4]){0});phase=7;replan_at=now;replan_plan_ready=false;qr_catalog_transition=true;
+    zero_generation=nav_bus_velocity((int[4]){0});phase=7;replan_at=now;replan_plan_ready=false;qr_catalog_transition=true;qr_anchor_requested=false;
+   if(qr_anchor_accumulating){nav_lidar_qr_anchor_end();qr_anchor_accumulating=false;}
     nav_log("[CATALOG_QR_WAIT] settled QR; collect1000ms then freeze confirmed obstacles and plan remaining work; no origin reset\r\n");goto end;
    }
    if(route.waiting&&calibrating){

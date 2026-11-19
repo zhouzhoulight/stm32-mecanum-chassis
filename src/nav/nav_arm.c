@@ -12,6 +12,8 @@
 
 TIM_HandleTypeDef htim3;
 static bool arm_lift_permitted;
+static bool observation_pose;
+static unsigned short observation_previous_pwm;
 bool nav_arm_bus_allowed(void){return arm_lift_permitted;}
 void nav_arm_init(void){nav_arm_hw_init();ArmTask_Init();}
 void nav_arm_tick(bool permit_lift)
@@ -28,6 +30,7 @@ void nav_arm_suspend_reads(void)
 }
 void nav_arm_stop(void)
 {
+ observation_pose=false;
  /* Bus emergency owns FE5; halt() must not enqueue a second UART writer. */
  unsigned char access=motor_access;motor_access=0;moving=0;
  halt("shared chassis/arm stop");motor_access=access;
@@ -51,6 +54,27 @@ bool nav_arm_transport_ready(void)
 {return !nav_arm_busy()&&lift_ready()&&!pending&&!probe_active&&labs(position-origin-clearance_height)<=20&&nav_arm_turn_done(1000);}
 bool nav_arm_idle_ready(void){return !nav_arm_busy()&&lift_ready()&&!pending&&!probe_active;}
 bool nav_arm_clearance_ready(void){return nav_arm_idle_ready()&&labs(position-origin-clearance_height)<=20;}
+bool nav_arm_observation_available(bool qr)
+{return servo_on[3]&&(camera_mask&(qr?2U:1U));}
+bool nav_arm_observation_begin(bool qr,unsigned camera_pwm)
+{
+ if(observation_pose||nav_app_active()||!nav_arm_clearance_ready()||
+    !nav_arm_observation_available(qr)||camera_pwm<500||camera_pwm>2500)return false;
+ if(!move_to(camera_height[qr?1:0]))return false;
+ observation_previous_pwm=servo[3];
+ goal[3]=(unsigned short)camera_pwm;
+ servo_credit[3]=0;
+ observation_pose=true;return true;
+}
+bool nav_arm_observation_ready(void)
+{return observation_pose&&nav_arm_idle_ready();}
+bool nav_arm_observation_return(void)
+{
+ if(!observation_pose)return true;
+ if(!nav_arm_idle_ready()||!move_to(clearance_height))return false;
+ goal[3]=observation_previous_pwm;servo_credit[3]=0;
+ observation_pose=false;return true;
+}
 bool nav_arm_faulted(void){return fault||measure_state;}
 bool nav_arm_envelope_ready(void)
 {return referenced&&config_valid&&pos_valid&&flags_valid&&!fault&&(flags&1)&&!(flags&12)&&!moving&&!task_active&&!grab_active&&!grab_preparing&&!work_active&&!measure_state&&labs(position-origin-clearance_height)<=20&&servo_on[0]&&servo_on[1]&&servo_on[2];}

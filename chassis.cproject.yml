@@ -50,9 +50,14 @@ project:
         - file: src/nav/nav_route.c
         - file: src/nav/nav_motion.c
         - file: src/nav/nav_arm.c
+        - file: src/nav/nav_arm2.c
+        - file: src/nav/nav_arm2_profile.c
+        - file: src/nav/nav_arm2_console.c
+        - file: src/nav/nav_arm2_emm.c
         - file: src/nav/nav_arm_hw.c
         - file: src/nav/nav_map.c
         - file: src/nav/nav_lidar.c
+        - file: src/nav/nav_lidar_observer.c
         - file: src/nav/nav_lidar_policy.c
         - file: src/nav/nav_lidar_map.c
         - file: src/nav/nav_vision.c
